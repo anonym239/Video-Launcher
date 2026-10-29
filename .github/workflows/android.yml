@@ -75,14 +75,10 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace assembleRelease
 
-      - name: APKs einsammeln
+      - name: APK einsammeln
         run: |
           mkdir -p dist
-          for f in android/app/build/outputs/apk/release/*.apk; do
-            abi=$(basename "$f" | sed -E 's/app-(.*)-release\.apk/\1/')
-            cp "$f" "dist/VideoLauncher-${abi}.apk"
-          done
-          cp dist/VideoLauncher-arm64-v8a.apk dist/VideoLauncher.apk
+          cp android/app/build/outputs/apk/release/app-release.apk dist/VideoLauncher.apk
           ls -la dist
 
       - uses: actions/upload-artifact@v4
@@ -99,10 +95,7 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Video Launcher 1.0.${{ github.run_number }}" \
             --latest \
-            --notes "Neueste Version vom Branch ${GITHUB_REF_NAME} (${GITHUB_SHA::7}).
+            --notes "Einfach **VideoLauncher.apk** herunterladen, öffnen und installieren – fertig. Funktioniert auf allen Android-Handys ab Android 7.
 
-          **Welche Datei?** Für fast alle Handys: **VideoLauncher.apk** (= arm64-v8a).
-          Ältere 32-Bit-Handys: VideoLauncher-armeabi-v7a.apk · Emulator/Chromebook: VideoLauncher-x86_64.apk
-
-          Installation: APK auf dem Handy öffnen → „Installation aus unbekannten Quellen“ erlauben.
+          Beim ersten Mal fragt Android, ob Installationen aus dieser Quelle erlaubt sind → erlauben.
           Unabhängiges Open-Source-Projekt, nicht mit YouTube/Google verbunden."

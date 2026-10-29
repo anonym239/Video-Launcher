@@ -4,13 +4,15 @@ Ein werbefreier Video-Client für YouTube-Inhalte, der komplett **auf deinem Han
 
 > Unabhängiges Open-Source-Projekt, **nicht mit YouTube oder Google verbunden**. Siehe [Rechtliches](#rechtliches).
 
-## App installieren (APK)
+## App installieren
 
-1. Öffne auf dem Handy die Seite **[Releases → latest](https://github.com/anonym239/Video-Launcher/releases/tag/latest)**.
-2. Lade **`VideoLauncher.apk`** herunter (passt für fast alle Handys; ältere 32-Bit-Geräte: `VideoLauncher-armeabi-v7a.apk`).
-3. Öffne die Datei und erlaube einmalig „Installation aus unbekannten Quellen“.
+Es gibt **eine einzige Datei**. Du musst nichts anderes installieren.
 
-Die APK wird bei jedem Push automatisch von GitHub Actions gebaut (`.github/workflows/android.yml`). Der Server (Node.js) läuft in der App selbst, Termux ist dafür nicht nötig.
+1. Auf dem Handy **[VideoLauncher.apk](https://github.com/anonym239/Video-Launcher/releases/latest/download/VideoLauncher.apk)** herunterladen.
+2. Datei öffnen → **Installieren**. Beim ersten Mal fragt Android, ob Installationen aus dieser Quelle erlaubt sind → erlauben.
+3. App öffnen – fertig.
+
+Alles steckt in der App, auch der Server. Termux, Node.js oder andere Programme brauchst du nicht. Die APK wird bei jedem Push automatisch von GitHub gebaut.
 
 In der App:
 - YouTube-Links lassen sich über „Teilen“ oder „Öffnen mit“ direkt an Video Launcher schicken.
@@ -43,7 +45,7 @@ In der App:
 - **Keine Werbung**: Werbeblöcke, gesponserte Inhalte und Shopping-Elemente werden herausgefiltert. Die Videos kommen ohne Werbeclips.
 - **Endlos schauen**: Startseite und „Ähnliche Videos“ enden nie. Wenn YouTube keine weiteren Seiten liefert, lädt die App immer neue Videos aus den Empfehlungen der zuletzt gezeigten Videos und aus deinem Verlauf. Autoplay spielt immer das nächste Video ab.
 
-## Alternative: Installation in Termux
+## Für Entwickler: ohne App in Termux starten
 
 1. **Termux** aus F-Droid installieren (die Play-Store-Version ist veraltet).
 2. In Termux:
