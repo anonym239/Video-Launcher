@@ -75,6 +75,39 @@ for (const src of prodPaths) {
   });
 }
 
+// ---- 3. Kompatibilität mit nodejs-mobile -----------------------------------------
+// nodejs-mobile ist ohne ICU gebaut: Unicode-Eigenschaften in Regexen (\p{…}) führen
+// beim Laden zu einem SyntaxError und der Server stürzt ab. Bekannte Stellen ersetzen.
+const ICU_PATCHES = [
+  {
+    file: 'node_modules/youtubei.js/dist/src/parser/classes/misc/Text.js',
+    from: '(/^(?:\\p{Emoji}|\\u200d)+$/u)',
+    to: '(/^(?:[\\u00a9\\u00ae\\u203c-\\u3299]|[\\ud83c-\\ud83e][\\udc00-\\udfff]|\\ufe0f|\\u20e3|\\u200d)+$/)'
+  },
+  {
+    file: 'node_modules/youtubei.js/dist/src/parser/classes/comments/CommentView.js',
+    from: '/[^\\p{L}\\p{N}\\p{P}\\p{Z}]/gu',
+    to: '/[\\ud83c-\\ud83e][\\udc00-\\udfff]|[\\u2600-\\u27bf]|\\ufe0f|\\u200d/g'
+  }
+];
+for (const p of ICU_PATCHES) {
+  const f = path.join(project, p.file);
+  const src = fs.readFileSync(f, 'utf8');
+  if (!src.includes(p.from)) throw new Error(`ICU-Patch passt nicht mehr: ${p.file} – bitte prepare-android.mjs anpassen`);
+  fs.writeFileSync(f, src.split(p.from).join(p.to));
+}
+// Sicherheitsnetz: Keine weiteren \p{…}-Regexe dürfen übrig sein.
+function scanIcu(dir) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const f = path.join(dir, e.name);
+    if (e.isDirectory()) scanIcu(f);
+    else if (e.name.endsWith('.js') && /\\[pP]\{[A-Za-z_=]+\}/.test(fs.readFileSync(f, 'utf8'))) {
+      throw new Error(`Unicode-Eigenschaft in Regex (läuft nicht auf Android): ${path.relative(project, f)}`);
+    }
+  }
+}
+scanIcu(project);
+
 let version = String(Date.now());
 try {
   version = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).trim() + '-' + version;

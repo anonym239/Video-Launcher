@@ -1,5 +1,6 @@
 // Verwaltet die InnerTube-Sitzung (youtubei.js) inklusive Google-Anmeldung.
 // Alles läuft lokal: kein API-Key, keine Drittserver.
+import './polyfills.js';
 import path from 'node:path';
 import { Innertube, UniversalCache } from 'youtubei.js';
 import { DATA_DIR, auth, store } from './store.js';
@@ -36,6 +37,7 @@ function baseOptions() {
   return {
     lang: s.lang || 'de',
     location: s.region || 'DE',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || process.env.TZ || 'UTC',
     enable_safety_mode: !!s.restricted,
     retrieve_player: true,
     generate_session_locally: false,

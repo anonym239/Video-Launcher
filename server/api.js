@@ -1,5 +1,6 @@
 // Alle /api-Endpunkte. Antworten sind schlanke JSON-Objekte für das Frontend.
 import { YTNodes } from 'youtubei.js';
+import { formatNumberDe } from './polyfills.js';
 import { getYT, resetYT, authState, isSignedIn, startOAuth, cancelOAuth, cookieLogin, signOut } from './yt.js';
 import { store } from './store.js';
 import {
@@ -974,7 +975,7 @@ async function watchData(info, id) {
   return {
     id,
     title: txt(p?.title) || b.title || '',
-    views: txt(p?.view_count?.view_count) || (b.view_count != null ? `${Number(b.view_count).toLocaleString('de-DE')} Aufrufe` : ''),
+    views: txt(p?.view_count?.view_count) || (b.view_count != null ? `${formatNumberDe(b.view_count)} Aufrufe` : ''),
     shortViews: txt(p?.view_count?.short_view_count),
     viewCount: b.view_count ?? null,
     published: txt(p?.published) || b.publish_date || '',

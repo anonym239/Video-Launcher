@@ -1,3 +1,5 @@
+import { formatNumberDe } from './polyfills.js';
+
 // Abo-Feed ohne Anmeldung: lädt die öffentlichen RSS-Feeds der abonnierten Kanäle.
 const TTL = 15 * 60 * 1000;
 const cache = new Map(); // channelId -> { at, items }
@@ -34,7 +36,7 @@ export function parseFeed(xml, channel) {
       thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
       duration: '',
       durationSec: 0,
-      views: views ? `${views.toLocaleString('de-DE')} Aufrufe` : '',
+      views: views ? `${formatNumberDe(views)} Aufrufe` : '',
       publishedAt: Date.parse(published) || 0,
       published: '',
       live: false,

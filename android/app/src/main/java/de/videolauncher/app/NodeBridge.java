@@ -96,6 +96,8 @@ public final class NodeBridge {
                 Os.setenv("TMPDIR", app.getCacheDir().getAbsolutePath(), true);
                 Os.setenv("HOME", app.getFilesDir().getAbsolutePath(), true);
                 Os.setenv("VL_PLATFORM", "android", true);
+                // Node.js für Android hat kein Intl → Zeitzone von Android übernehmen.
+                Os.setenv("TZ", java.util.TimeZone.getDefault().getID(), true);
                 int code = startNodeWithArguments(new String[]{
                         "node",
                         "--max-old-space-size=256",

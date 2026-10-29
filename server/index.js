@@ -1,5 +1,6 @@
 // Video Launcher – lokaler Server. Läuft auf dem Handy (z. B. in Termux) und liefert
 // die Weboberfläche sowie die YouTube-Daten ohne Werbung und ohne API-Key.
+import './polyfills.js';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
