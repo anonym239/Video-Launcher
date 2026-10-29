@@ -185,7 +185,16 @@ function lanAddresses() {
 process.on('uncaughtException', (e) => console.error('[fehler]', e?.stack || e));
 process.on('unhandledRejection', (e) => console.error('[fehler] unbehandelt:', e?.stack || e));
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+// Pfade über realpath vergleichen: Auf Android ist /data/user/0 ein Link auf /data/data.
+function isMainModule() {
+  if (!process.argv[1]) return false;
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  }
+}
+const isMain = isMainModule();
 if (isMain) {
   const server = createServer();
   server.listen(PORT, HOST, () => {
