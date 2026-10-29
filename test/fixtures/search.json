@@ -1,0 +1,148 @@
+{
+ "contents": {
+  "twoColumnSearchResultsRenderer": {
+   "primaryContents": {
+    "sectionListRenderer": {
+     "contents": [
+      {
+       "itemSectionRenderer": {
+        "contents": [
+         {
+          "searchPyvRenderer": {
+           "ads": []
+          }
+         },
+         {
+          "channelRenderer": {
+           "channelId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+           "title": {
+            "simpleText": "Rick Astley"
+           },
+           "navigationEndpoint": {
+            "browseEndpoint": {
+             "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+             "canonicalBaseUrl": "/@RickAstleyYT"
+            }
+           },
+           "thumbnail": {
+            "thumbnails": [
+             {
+              "url": "//yt3.ggpht.com/rick88.jpg",
+              "width": 88,
+              "height": 88
+             },
+             {
+              "url": "//yt3.ggpht.com/rick176.jpg",
+              "width": 176,
+              "height": 176
+             }
+            ]
+           },
+           "descriptionSnippet": {
+            "runs": [
+             {
+              "text": "Offizieller Kanal"
+             }
+            ]
+           },
+           "shortBylineText": {
+            "runs": [
+             {
+              "text": "Rick Astley",
+              "navigationEndpoint": {
+               "browseEndpoint": {
+                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw"
+               }
+              }
+             }
+            ]
+           },
+           "videoCountText": {
+            "runs": [
+             {
+              "text": "4,2 Mio. Abonnenten"
+             }
+            ]
+           },
+           "subscriberCountText": {
+            "simpleText": "@RickAstleyYT"
+           }
+          }
+         },
+         {
+          "playlistRenderer": {
+           "playlistId": "PLabcdefghijklmnop",
+           "title": {
+            "simpleText": "Beste Hits"
+           },
+           "thumbnails": [
+            {
+             "thumbnails": [
+              {
+               "url": "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+               "width": 480,
+               "height": 360
+              }
+             ]
+            }
+           ],
+           "videoCount": "25",
+           "navigationEndpoint": {
+            "watchEndpoint": {
+             "videoId": "dQw4w9WgXcQ",
+             "playlistId": "PLabcdefghijklmnop"
+            }
+           },
+           "shortBylineText": {
+            "runs": [
+             {
+              "text": "Musikfan",
+              "navigationEndpoint": {
+               "browseEndpoint": {
+                "browseId": "UCzzzzzzzzzzzzzzzzzzzzzz"
+               }
+              }
+             }
+            ]
+           },
+           "videoCountText": {
+            "runs": [
+             {
+              "text": "25 Videos"
+             }
+            ]
+           },
+           "longBylineText": {
+            "runs": [
+             {
+              "text": "Musikfan",
+              "navigationEndpoint": {
+               "browseEndpoint": {
+                "browseId": "UCzzzzzzzzzzzzzzzzzzzzzz"
+               }
+              }
+             }
+            ]
+           },
+           "thumbnailText": {
+            "runs": [
+             {
+              "text": "25"
+             },
+             {
+              "text": " Videos"
+             }
+            ]
+           }
+          }
+         }
+        ]
+       }
+      }
+     ]
+    }
+   }
+  }
+ },
+ "estimatedResults": "1000"
+}

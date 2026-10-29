@@ -1,0 +1,964 @@
+// Alle /api-Endpunkte. Antworten sind schlanke JSON-Objekte für das Frontend.
+import { YTNodes } from 'youtubei.js';
+import { getYT, resetYT, authState, isSignedIn, startOAuth, cancelOAuth, cookieLogin, signOut } from './yt.js';
+import { store } from './store.js';
+import {
+  collectItems, itemsFromFeed, normalizeComment, textToHtml, thumb, txt, escapeHtml, videoThumb, formatDuration, unwrap
+} from './normalize.js';
+import { streamsFor, dashManifest, invalidate } from './stream.js';
+import { localSubscriptionFeed } from './rss.js';
+
+// ---- Fortsetzungen (Endlos-Scrollen) ----------------------------------------
+const conts = new Map();
+const CONT_TTL = 30 * 60 * 1000;
+
+function saveCont(obj, kind) {
+  if (!obj) return null;
+  const key = kind + '_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  conts.set(key, { obj, at: Date.now(), kind });
+  if (conts.size > 3000) conts.delete(conts.keys().next().value);
+  return key;
+}
+
+function loadCont(key, kind) {
+  const c = conts.get(key);
+  if (!c || c.kind !== kind || Date.now() - c.at > CONT_TTL) {
+    throw httpError(410, 'Die Liste ist abgelaufen. Bitte Seite neu laden.');
+  }
+  return c.obj;
+}
+
+export function httpError(status, message) {
+  return Object.assign(new Error(message), { status });
+}
+
+const hasCont = (feed) => {
+  try {
+    return !!feed?.has_continuation;
+  } catch {
+    return false;
+  }
+};
+
+function feedResult(feed, kind, extra = {}) {
+  const items = itemsFromFeed(feed);
+  return { items, cont: hasCont(feed) ? saveCont(feed, kind) : null, ...extra };
+}
+
+function requireLogin() {
+  if (!isSignedIn()) throw httpError(401, 'Dafür musst du angemeldet sein.');
+}
+
+const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
+function checkId(id) {
+  if (!VIDEO_ID.test(id || '')) throw httpError(400, 'Ungültige Video-ID');
+  return id;
+}
+
+const FILTER_NAMES = (feed) => {
+  try {
+    return feed.filters || [];
+  } catch {
+    return [];
+  }
+};
+
+// ---- Handler ------------------------------------------------------------------
+export const routes = {
+  'GET /api/status': async () => ({ auth: publicAuth(), settings: store.settings }),
+
+  'GET /api/home': async (q) => {
+    if (q.get('cont')) {
+      const feed = loadCont(q.get('cont'), 'home');
+      return feedResult(await feed.getContinuation(), 'home');
+    }
+    const yt = await getYT();
+    let feed;
+    try {
+      feed = await yt.getHomeFeed();
+    } catch (e) {
+      // Ohne Anmeldung/Verlauf liefert YouTube manchmal keine Startseite – dann Trends anzeigen.
+      feed = null;
+    }
+    let chips = feed ? FILTER_NAMES(feed) : [];
+    const chip = q.get('chip');
+    if (feed && chip && chip !== chips[0]) {
+      feed = await feed.getFilteredFeed(chip);
+    }
+    let res = feed ? feedResult(feed, 'home') : { items: [], cont: null };
+    if (!res.items.length) {
+      const search = await yt.search(store.settings.region === 'DE' ? 'Trends Deutschland' : 'trending', { type: 'video', upload_date: 'week' });
+      res = { items: collectItems(search.results), cont: hasCont(search) ? saveCont(search, 'search') : null, contKind: 'search' };
+      chips = [];
+    }
+    return { ...res, chips };
+  },
+
+  'GET /api/search': async (q) => {
+    if (q.get('cont')) {
+      const s = loadCont(q.get('cont'), 'search');
+      const next = await s.getContinuation();
+      return { items: collectItems(next.results), cont: hasCont(next) ? saveCont(next, 'search') : null };
+    }
+    const query = (q.get('q') || '').trim();
+    if (!query) return { items: [], cont: null };
+    store.addSearch(query);
+    const filters = {};
+    const map = { type: ['all', 'video', 'shorts', 'channel', 'playlist', 'movie'], upload_date: ['all', 'today', 'week', 'month', 'year'], duration: ['all', 'short', 'medium', 'long'], prioritize: ['relevance', 'popularity'] };
+    for (const [k, allowed] of Object.entries(map)) {
+      const v = q.get(k);
+      if (v && allowed.includes(v) && v !== 'all' && v !== 'relevance') filters[k] = v;
+    }
+    const features = (q.get('features') || '').split(',').filter((f) => ['hd', 'subtitles', 'creative_commons', '3d', 'live', '4k', '360', 'location', 'hdr', 'vr180'].includes(f));
+    if (features.length) filters.features = features;
+    const yt = await getYT();
+    const s = await yt.search(query, filters);
+    let corrected = null;
+    try {
+      const dym = s.results?.find?.((n) => n.type === 'DidYouMean' || n.type === 'ShowingResultsFor');
+      if (dym) corrected = txt(dym.corrected_query || dym.did_you_mean);
+    } catch {}
+    return { items: collectItems(s.results), cont: hasCont(s) ? saveCont(s, 'search') : null, corrected, estimated: s.estimated_results || 0 };
+  },
+
+  'GET /api/suggest': async (q) => {
+    const query = (q.get('q') || '').trim();
+    if (!query) return { suggestions: store.searchHistory.slice(0, 12).map((s) => ({ text: s, history: true })) };
+    const hist = store.searchHistory.filter((s) => s.toLowerCase().startsWith(query.toLowerCase())).slice(0, 3);
+    let list = [];
+    try {
+      const yt = await getYT();
+      list = await yt.getSearchSuggestions(query);
+    } catch {}
+    const seen = new Set(hist.map((h) => h.toLowerCase()));
+    return {
+      suggestions: [
+        ...hist.map((text) => ({ text, history: true })),
+        ...list.filter((s) => !seen.has(s.toLowerCase())).slice(0, 12 - hist.length).map((text) => ({ text, history: false }))
+      ]
+    };
+  },
+
+  'DELETE /api/suggest': async (q) => {
+    store.removeSearch(q.get('q') || '');
+    return { ok: true };
+  },
+
+  'GET /api/video/:id': async (q, { id }) => {
+    checkId(id);
+    const yt = await getYT();
+    const list = q.get('list');
+    let info;
+    if (list) {
+      const ep = new YTNodes.NavigationEndpoint({ watchEndpoint: { videoId: id, playlistId: list, index: Number(q.get('index') || 0) } });
+      info = await yt.getInfo(ep);
+    } else {
+      info = await yt.getInfo(id);
+    }
+    return watchData(info, id);
+  },
+
+  'GET /api/related': async (q) => {
+    const info = loadCont(q.get('cont'), 'related');
+    const next = await info.getWatchNextContinuation();
+    return { items: collectItems(next.watch_next_feed), cont: next.wn_has_continuation ? saveCont(next, 'related') : null };
+  },
+
+  'GET /api/streams/:id': async (q, { id }) => {
+    checkId(id);
+    if (q.get('fresh')) invalidate(id);
+    return streamsFor(id);
+  },
+
+  'GET /api/manifest/:file': async (q, { file }) => {
+    const id = checkId(String(file).replace(/\.mpd$/, ''));
+    return { __raw: await dashManifest(id), __type: 'application/dash+xml' };
+  },
+
+  'GET /api/comments/:id': async (q, { id }) => {
+    if (q.get('cont')) {
+      const c = loadCont(q.get('cont'), 'comments');
+      const next = await c.getContinuation();
+      return commentsResult(next);
+    }
+    const yt = await getYT();
+    const sort = q.get('sort') === 'new' ? 'NEWEST_FIRST' : 'TOP_COMMENTS';
+    const c = await yt.getComments(checkId(id), sort);
+    return { ...commentsResult(c), count: txt(c.header?.count) || txt(c.header?.comments_count) };
+  },
+
+  'GET /api/replies': async (q) => {
+    const more = q.get('more') === '1';
+    const obj = loadCont(q.get('cont'), more ? 'replies' : 'thread');
+    const res = more ? await obj.getContinuation() : await obj.getReplies();
+    const items = (res.replies || []).map((r) => {
+      const n = normalizeComment(r);
+      if (n && isSignedIn() && r.comment) n.key = saveCont(r.comment, 'cview');
+      return n;
+    }).filter(Boolean);
+    let hasMore = false;
+    try {
+      hasMore = !!res.has_continuation;
+    } catch {}
+    return { items, cont: hasMore ? saveCont(res, 'replies') : null };
+  },
+
+  'GET /api/channel/:id': async (q, { id }) => {
+    const yt = await getYT();
+    let channelId = id;
+    if (id.startsWith('@')) channelId = await resolveHandle(id);
+    const tab = q.get('tab') || 'home';
+    if (q.get('cont')) {
+      const feed = loadCont(q.get('cont'), 'channel');
+      const next = await feed.getContinuation();
+      return feedResult(next, 'channel');
+    }
+    const channel = await yt.getChannel(channelId);
+    const head = channelHeader(channel, channelId);
+    let feed = channel;
+    const getters = { videos: 'getVideos', shorts: 'getShorts', streams: 'getLiveStreams', playlists: 'getPlaylists', posts: 'getCommunity', podcasts: 'getPodcasts', releases: 'getReleases' };
+    if (tab === 'about') {
+      return { channel: head, about: await channelAbout(channel, head), items: [], cont: null };
+    }
+    if (getters[tab]) {
+      try {
+        feed = await channel[getters[tab]]();
+      } catch (e) {
+        return { channel: head, items: [], cont: null, filters: [], error: 'Dieser Tab ist für den Kanal nicht verfügbar.' };
+      }
+    }
+    const sort = q.get('sort');
+    const filters = FILTER_NAMES(feed);
+    if (sort && filters.includes(sort)) {
+      try {
+        feed = await feed.applyFilter(sort);
+      } catch {}
+    }
+    return { channel: head, filters, ...feedResult(feed, 'channel') };
+  },
+
+  'GET /api/channel/:id/search': async (q, { id }) => {
+    const yt = await getYT();
+    const channel = await yt.getChannel(id.startsWith('@') ? await resolveHandle(id) : id);
+    const res = await channel.search(q.get('q') || '');
+    return { ...feedResult(res, 'channel') };
+  },
+
+  'GET /api/resolve': async (q) => {
+    const yt = await getYT();
+    const url = q.get('url') || '';
+    const ep = await yt.resolveURL(url.startsWith('http') ? url : 'https://www.youtube.com' + (url.startsWith('/') ? '' : '/') + url);
+    const p = ep?.payload || {};
+    if (p.videoId) return { type: 'video', id: p.videoId };
+    if (p.browseId?.startsWith('UC')) return { type: 'channel', id: p.browseId };
+    if (p.browseId?.startsWith('VL')) return { type: 'playlist', id: p.browseId.slice(2) };
+    if (p.playlistId) return { type: 'playlist', id: p.playlistId };
+    return { type: 'unknown' };
+  },
+
+  'GET /api/playlist/:id': async (q, { id }) => {
+    if (id.startsWith('LP')) {
+      const p = store.getPlaylist(id);
+      if (!p) throw httpError(404, 'Playlist nicht gefunden');
+      return {
+        info: { id, title: p.title, local: true, count: `${p.videos.length} Videos`, privacy: p.privacy, updated: p.updated, thumbnail: p.videos[0]?.thumbnail || '', author: { name: 'Du' }, editable: true },
+        items: p.videos.map((v) => ({ type: 'video', ...v })),
+        cont: null
+      };
+    }
+    if ((id === 'WL' || id === 'LL') && !isSignedIn()) {
+      const name = id === 'WL' ? 'watchLater' : 'liked';
+      const list = store.listOf(name);
+      return {
+        info: { id, title: id === 'WL' ? 'Später ansehen' : 'Videos mit „Mag ich“-Bewertung', local: true, count: `${list.length} Videos`, thumbnail: list[0]?.thumbnail || '', author: { name: 'Du' }, editable: true },
+        items: list.map((v) => ({ type: 'video', ...v })),
+        cont: null
+      };
+    }
+    if (q.get('cont')) {
+      const p = loadCont(q.get('cont'), 'playlist');
+      const next = await p.getContinuation();
+      return { items: collectItems(next.items), cont: hasCont(next) ? saveCont(next, 'playlist') : null };
+    }
+    const yt = await getYT();
+    const p = await yt.getPlaylist(id);
+    const i = p.info || {};
+    const items = collectItems(p.items);
+    return {
+      info: {
+        id,
+        title: i.title || '',
+        description: i.description || '',
+        count: i.total_items || '',
+        views: i.views || '',
+        updated: i.last_updated || '',
+        privacy: i.privacy || '',
+        thumbnail: thumb(i.thumbnails, 720) || items[0]?.thumbnail || '',
+        author: i.author ? { id: i.author.id, name: i.author.name, avatar: thumb(i.author.thumbnails, 88) } : null,
+        editable: !!i.is_editable
+      },
+      items,
+      cont: hasCont(p) ? saveCont(p, 'playlist') : null
+    };
+  },
+
+  'GET /api/shorts': async (q) => {
+    const yt = await getYT();
+    if (q.get('cont')) {
+      const info = loadCont(q.get('cont'), 'shorts');
+      const next = await info.getWatchNextContinuation();
+      return { ids: shortIds(next), cont: next.wn_has_continuation ? saveCont(next, 'shorts') : null };
+    }
+    let seed = q.get('seed');
+    let ids = [];
+    if (!seed) {
+      ids = await shortsSeeds(yt);
+      seed = ids[0];
+    }
+    if (!seed) return { ids: [], cont: null };
+    checkId(seed);
+    try {
+      const info = await yt.getShortsVideoInfo(seed);
+      const next = shortIds(info);
+      const all = [seed, ...ids.slice(1), ...next].filter((v, i, a) => a.indexOf(v) === i);
+      return { ids: all, cont: info.wn_has_continuation ? saveCont(info, 'shorts') : null };
+    } catch {
+      return { ids: [seed, ...ids.slice(1)].filter((v, i, a) => a.indexOf(v) === i), cont: null };
+    }
+  },
+
+  'GET /api/short/:id': async (q, { id }) => {
+    checkId(id);
+    const yt = await getYT();
+    const info = await yt.getShortsVideoInfo(id);
+    const b = info.basic_info || {};
+    const header = findNode(info.player_overlays, 'ReelPlayerHeader');
+    const overlay = info.player_overlays || {};
+    let avatar = thumb(header?.channel_thumbnail, 88);
+    let commentCount = '';
+    const commentsBtn = findNode(overlay, 'ButtonView', (n) => /comment|kommentar/i.test(n.accessibility_text || n.icon_name || ''));
+    if (commentsBtn) commentCount = commentsBtn.title || '';
+    const sub = await subscribedState(b.channel_id, info);
+    return {
+      id,
+      title: b.title || txt(header?.reel_title_text) || '',
+      channel: { id: b.channel_id || '', name: b.author || txt(header?.channel_title_text) || '', avatar },
+      likes: b.like_count ?? null,
+      liked: !!b.is_liked || store.listOf('liked').some((v) => v.id === id),
+      disliked: !!b.is_disliked,
+      views: b.view_count ?? null,
+      comments: commentCount,
+      subscribed: sub,
+      thumbnail: videoThumb(id, 'oar2')
+    };
+  },
+
+  'GET /api/hashtag/:tag': async (q, { tag }) => {
+    if (q.get('cont')) {
+      const f = loadCont(q.get('cont'), 'hashtag');
+      return feedResult(await f.getContinuation(), 'hashtag');
+    }
+    const yt = await getYT();
+    const feed = await yt.getHashtag(tag);
+    let title = '#' + tag;
+    let subtitle = '';
+    try {
+      title = txt(feed.header?.hashtag || feed.header?.title) || title;
+      subtitle = [txt(feed.header?.hashtag_info_text), txt(feed.header?.channel_info_text)].filter(Boolean).join(' • ');
+    } catch {}
+    return { title, subtitle, ...feedResult(feed, 'hashtag') };
+  },
+
+  // ---- Abos & Feeds -------------------------------------------------------------
+  'GET /api/feed/subscriptions': async (q) => {
+    if (isSignedIn() && q.get('local') !== '1') {
+      if (q.get('cont')) return feedResult(await loadCont(q.get('cont'), 'subs').getContinuation(), 'subs');
+      const yt = await getYT();
+      return feedResult(await yt.getSubscriptionsFeed(), 'subs');
+    }
+    const { items, errors } = await localSubscriptionFeed(store.subscriptions, { shorts: q.get('shorts') === '1' });
+    return { items, cont: null, local: true, errors };
+  },
+
+  'GET /api/subscriptions': async () => {
+    if (isSignedIn()) {
+      try {
+        const yt = await getYT();
+        const feed = await yt.getChannelsFeed();
+        let items = itemsFromFeed(feed).filter((i) => i.type === 'channel');
+        let f = feed;
+        for (let i = 0; i < 20 && hasCont(f); i++) {
+          f = await f.getContinuation();
+          items = items.concat(itemsFromFeed(f).filter((x) => x.type === 'channel'));
+        }
+        return { items, account: true };
+      } catch (e) {
+        return { items: store.subscriptions.map(localChannel), account: false, error: e.message };
+      }
+    }
+    return { items: store.subscriptions.map(localChannel), account: false };
+  },
+
+  'POST /api/subscribe': async (q, p, body) => {
+    const ch = body.channel || {};
+    if (!/^UC[\w-]{22}$/.test(ch.id || '')) throw httpError(400, 'Ungültige Kanal-ID');
+    if (isSignedIn()) {
+      const yt = await getYT();
+      if (body.on) await yt.interact.subscribe(ch.id);
+      else await yt.interact.unsubscribe(ch.id);
+    }
+    if (body.on) store.subscribe(ch);
+    else store.unsubscribe(ch.id);
+    return { subscribed: !!body.on };
+  },
+
+  'POST /api/notifications/pref': async (q, p, body) => {
+    requireLogin();
+    const yt = await getYT();
+    const type = ['ALL', 'PERSONALIZED', 'NONE'].includes(body.type) ? body.type : 'PERSONALIZED';
+    await yt.interact.setNotificationPreferences(body.channelId, type);
+    return { ok: true };
+  },
+
+  'GET /api/notifications': async (q) => {
+    requireLogin();
+    const yt = await getYT();
+    const menu = q.get('cont') ? await loadCont(q.get('cont'), 'notif').getContinuation() : await yt.getNotifications();
+    const items = (menu.contents || []).filter((n) => n.type === 'Notification').map((n) => ({
+      id: n.notification_id,
+      avatar: thumb(n.thumbnails, 88),
+      thumbnail: thumb(n.video_thumbnails, 320),
+      text: txt(n.short_message),
+      time: txt(n.sent_time),
+      read: !!n.read,
+      url: n.endpoint?.payload?.videoId ? `/watch?v=${n.endpoint.payload.videoId}` : (n.endpoint?.metadata?.url || '')
+    }));
+    let cont = null;
+    try {
+      cont = saveCont(menu, 'notif');
+    } catch {}
+    return { items, cont: items.length ? cont : null };
+  },
+
+  'GET /api/notifications/count': async () => {
+    if (!isSignedIn()) return { count: 0 };
+    try {
+      const yt = await getYT();
+      return { count: await yt.getUnseenNotificationsCount() };
+    } catch {
+      return { count: 0 };
+    }
+  },
+
+  // ---- Bewertungen, Kommentare -------------------------------------------------
+  'POST /api/rate': async (q, p, body) => {
+    const id = checkId(body.id);
+    const rating = body.rating;
+    if (isSignedIn()) {
+      const yt = await getYT();
+      if (rating === 'like') await yt.interact.like(id);
+      else if (rating === 'dislike') await yt.interact.dislike(id);
+      else await yt.interact.removeRating(id);
+    }
+    if (body.video) store.toggleIn('liked', { ...body.video, id }, rating === 'like');
+    return { rating };
+  },
+
+  'POST /api/comment': async (q, p, body) => {
+    requireLogin();
+    const yt = await getYT();
+    const text = String(body.text || '').trim();
+    if (!text) throw httpError(400, 'Kommentar ist leer');
+    await yt.interact.comment(checkId(body.id), text);
+    return { ok: true };
+  },
+
+  'POST /api/comment/action': async (q, p, body) => {
+    requireLogin();
+    const c = loadCont(body.key, 'cview');
+    const action = body.action;
+    if (!['like', 'unlike', 'dislike', 'undislike', 'reply'].includes(action)) throw httpError(400, 'Unbekannte Aktion');
+    if (action === 'reply') {
+      const text = String(body.text || '').trim();
+      if (!text) throw httpError(400, 'Antwort ist leer');
+      await c.reply(text);
+    } else {
+      await c[action]();
+    }
+    return { ok: true };
+  },
+
+  // ---- Verlauf ----------------------------------------------------------------
+  'GET /api/feed/history': async (q) => {
+    if (isSignedIn() && q.get('local') !== '1') {
+      const yt = await getYT();
+      if (q.get('cont')) return historyResult(await loadCont(q.get('cont'), 'history').getContinuation());
+      const h = q.get('q') ? await (await yt.getHistory()).search(q.get('q')) : await yt.getHistory();
+      return historyResult(h);
+    }
+    const query = (q.get('q') || '').toLowerCase();
+    const list = store.history.filter((v) => !query || v.title.toLowerCase().includes(query) || v.channel?.name?.toLowerCase().includes(query));
+    return { items: list.slice(0, 500).map((v) => ({ type: v.short ? 'short' : 'video', ...v })), cont: null, local: true, paused: store.settings.historyPaused };
+  },
+
+  'POST /api/history': async (q, p, body) => {
+    const v = body.video || {};
+    checkId(v.id);
+    store.addHistory(v);
+    if (isSignedIn() && !store.settings.historyPaused) {
+      try {
+        const yt = await getYT();
+        const info = await yt.getBasicInfo(v.id);
+        await info.addToWatchHistory();
+      } catch {
+        /* nicht kritisch */
+      }
+    }
+    return { ok: true };
+  },
+
+  'DELETE /api/history': async (q) => {
+    const id = q.get('id');
+    if (id) {
+      store.removeHistory(id);
+      if (isSignedIn()) {
+        try {
+          const yt = await getYT();
+          await (await yt.getHistory()).removeVideo(id, 3);
+        } catch {}
+      }
+    } else {
+      store.clearHistory();
+      if (isSignedIn()) {
+        try {
+          const yt = await getYT();
+          await (await yt.getHistory()).clearWatchHistory();
+        } catch {}
+      }
+    }
+    return { ok: true };
+  },
+
+  'POST /api/history/pause': async (q, p, body) => {
+    store.updateSettings({ historyPaused: !!body.paused });
+    if (isSignedIn()) {
+      try {
+        const yt = await getYT();
+        const h = await yt.getHistory();
+        if (body.paused) await h.pauseWatchHistory();
+        else await h.resumeWatchHistory();
+      } catch {}
+    }
+    return { paused: store.settings.historyPaused };
+  },
+
+  'GET /api/position/:id': async (q, { id }) => ({ t: store.getPosition(id) }),
+  'POST /api/position': async (q, p, body) => {
+    store.setPosition(checkId(body.id), Number(body.t) || 0, Number(body.d) || 0);
+    return { ok: true };
+  },
+  'GET /api/positions': async () => ({ positions: store.positions }),
+
+  // ---- Bibliothek / Playlists -------------------------------------------------
+  'GET /api/library': async () => {
+    const res = {
+      history: store.history.slice(0, 20).map((v) => ({ type: v.short ? 'short' : 'video', ...v })),
+      local: store.playlists.map(localPlaylistItem),
+      watchLater: { count: store.listOf('watchLater').length, thumbnail: store.listOf('watchLater')[0]?.thumbnail || '' },
+      liked: { count: store.listOf('liked').length, thumbnail: store.listOf('liked')[0]?.thumbnail || '' },
+      playlists: [],
+      account: isSignedIn()
+    };
+    if (isSignedIn()) {
+      const yt = await getYT();
+      try {
+        const h = await yt.getHistory();
+        const items = itemsFromFeed(h);
+        if (items.length) res.history = items.slice(0, 20);
+      } catch {}
+      try {
+        res.playlists = itemsFromFeed(await yt.getPlaylists()).filter((i) => i.type === 'playlist');
+      } catch {}
+    }
+    return res;
+  },
+
+  'GET /api/save-options/:id': async (q, { id }) => {
+    checkId(id);
+    const options = [];
+    if (isSignedIn()) {
+      try {
+        const yt = await getYT();
+        const r = await yt.actions.execute('/playlist/get_add_to_playlist', { videoIds: [id], excludeWatchLater: false, parse: true });
+        const nodes = [];
+        walkType(r, 'PlaylistAddToOption', nodes);
+        for (const n of nodes) options.push({ id: n.playlist_id, title: txt(n.title), on: n.contains_selected_videos === 'ALL', privacy: n.privacy || '', account: true });
+      } catch (e) {
+        options.push({ id: 'WL', title: 'Später ansehen', on: false, account: true });
+      }
+    } else {
+      options.push({ id: 'WL', title: 'Später ansehen', on: store.listOf('watchLater').some((v) => v.id === id), account: false });
+    }
+    for (const p of store.playlists) options.push({ id: p.id, title: p.title, on: p.videos.some((v) => v.id === id), privacy: p.privacy, account: false, local: true });
+    return { options };
+  },
+
+  'POST /api/save': async (q, p, body) => {
+    const video = body.video || {};
+    checkId(video.id);
+    const pid = String(body.playlistId || '');
+    const on = !!body.on;
+    if (pid.startsWith('LP')) {
+      store.setInPlaylist(pid, video, on);
+    } else if (pid === 'WL' && !isSignedIn()) {
+      store.toggleIn('watchLater', video, on);
+    } else {
+      requireLogin();
+      const yt = await getYT();
+      if (on) await yt.playlist.addVideos(pid, [video.id]);
+      else await yt.playlist.removeVideos(pid, [video.id]);
+    }
+    return { on };
+  },
+
+  'POST /api/playlists': async (q, p, body) => {
+    const title = String(body.title || '').trim();
+    if (!title) throw httpError(400, 'Titel fehlt');
+    const privacy = ['PUBLIC', 'PRIVATE', 'UNLISTED'].includes(body.privacy) ? body.privacy : 'PRIVATE';
+    const ids = (body.videoIds || []).filter((v) => /^[\w-]{11}$/.test(v));
+    if (isSignedIn() && !body.local) {
+      const yt = await getYT();
+      const r = await yt.playlist.create(title, ids, privacy);
+      return { id: r.playlist_id, title, account: true };
+    }
+    const pl = store.createPlaylist(title, privacy);
+    if (body.video) store.setInPlaylist(pl.id, body.video, true);
+    return { id: pl.id, title, local: true };
+  },
+
+  'PATCH /api/playlists/:id': async (q, { id }, body) => {
+    if (id.startsWith('LP')) return store.renamePlaylist(id, body.title);
+    requireLogin();
+    const yt = await getYT();
+    if (body.title) await yt.playlist.setName(id, body.title);
+    if (body.description != null) await yt.playlist.setDescription(id, body.description);
+    return { ok: true };
+  },
+
+  'DELETE /api/playlists/:id': async (q, { id }) => {
+    if (id.startsWith('LP')) {
+      store.deletePlaylist(id);
+      return { ok: true };
+    }
+    requireLogin();
+    const yt = await getYT();
+    await yt.playlist.delete(id);
+    return { ok: true };
+  },
+
+  'POST /api/list/:name': async (q, { name }, body) => {
+    if (!['watchLater', 'liked'].includes(name)) throw httpError(404, 'Unbekannte Liste');
+    const video = body.video || {};
+    checkId(video.id);
+    return { on: store.toggleIn(name, video, !!body.on) };
+  },
+
+  // ---- Einstellungen, Backup --------------------------------------------------
+  'POST /api/settings': async (q, p, body) => {
+    const before = { ...store.settings };
+    const s = store.updateSettings(body);
+    if (before.lang !== s.lang || before.region !== s.region || before.restricted !== s.restricted) await resetYT();
+    if (JSON.stringify(before.clients) !== JSON.stringify(s.clients)) invalidate();
+    return s;
+  },
+
+  'GET /api/backup': async () => ({ __raw: JSON.stringify(store.exportAll(), null, 1), __type: 'application/json', __download: 'video-launcher-backup.json' }),
+  'POST /api/backup': async (q, p, body) => {
+    store.importAll(body);
+    return { ok: true };
+  },
+
+  // ---- Anmeldung --------------------------------------------------------------
+  'GET /api/auth/status': async () => publicAuth(),
+  'POST /api/auth/oauth': async () => {
+    const r = await startOAuth();
+    return { ...publicAuth(), ...r };
+  },
+  'POST /api/auth/cancel': async () => {
+    cancelOAuth();
+    return publicAuth();
+  },
+  'POST /api/auth/cookie': async (q, p, body) => {
+    await cookieLogin(body.cookie);
+    return publicAuth();
+  },
+  'POST /api/auth/logout': async () => {
+    await signOut();
+    return publicAuth();
+  }
+};
+
+// ---- Hilfsfunktionen ----------------------------------------------------------
+function publicAuth() {
+  return {
+    status: authState.status,
+    method: authState.method,
+    code: authState.code,
+    url: authState.url,
+    expires: authState.expires,
+    error: authState.error,
+    account: authState.account
+  };
+}
+
+function localChannel(s) {
+  return { type: 'channel', id: s.id, name: s.name, avatar: s.avatar, subscribers: '', videos: '', handle: '' };
+}
+
+function localPlaylistItem(p) {
+  return { type: 'playlist', id: p.id, title: p.title, thumbnail: p.videos[0]?.thumbnail || '', count: `${p.videos.length} Videos`, channel: { name: 'Du' }, local: true, privacy: p.privacy };
+}
+
+function walkType(root, type, out, seen = new WeakSet()) {
+  root = unwrap(root);
+  if (!root || typeof root !== 'object' || seen.has(root)) return;
+  seen.add(root);
+  if (root.type === type) out.push(root);
+  for (const v of Array.isArray(root) ? root : Object.values(root)) walkType(v, type, out, seen);
+}
+
+function findNode(root, type, pred) {
+  const out = [];
+  walkType(root, type, out);
+  return pred ? out.find(pred) : out[0];
+}
+
+function commentsResult(c) {
+  const items = (c.contents || []).map((t) => {
+    const n = normalizeComment(t);
+    if (n && t.has_replies) n.thread = saveCont(t, 'thread');
+    if (n && isSignedIn() && t.comment) n.key = saveCont(t.comment, 'cview');
+    return n;
+  }).filter(Boolean);
+  return { items, cont: hasCont(c) ? saveCont(c, 'comments') : null };
+}
+
+function historyResult(h) {
+  const sections = [];
+  try {
+    for (const s of h.sections || []) {
+      const items = collectItems(s.contents);
+      if (items.length) sections.push({ title: txt(s.header?.title), items });
+    }
+  } catch {}
+  const items = sections.length ? [] : itemsFromFeed(h);
+  return { sections, items, cont: hasCont(h) ? saveCont(h, 'history') : null };
+}
+
+function shortIds(info) {
+  return (info.watch_next_feed || []).map((ep) => ep?.payload?.videoId).filter((v) => v && /^[\w-]{11}$/.test(v));
+}
+
+async function shortsSeeds(yt) {
+  try {
+    const home = await yt.getHomeFeed();
+    const ids = itemsFromFeed(home, { flatten: true }).filter((i) => i.type === 'short').map((i) => i.id);
+    if (ids.length) return ids;
+  } catch {}
+  try {
+    const s = await yt.search('shorts', { type: 'shorts' });
+    return collectItems(s.results, { flatten: true }).filter((i) => i.type === 'short' || i.type === 'video').map((i) => i.id);
+  } catch {
+    return [];
+  }
+}
+
+async function resolveHandle(handle) {
+  const yt = await getYT();
+  const ep = await yt.resolveURL('https://www.youtube.com/' + handle);
+  const id = ep?.payload?.browseId;
+  if (!id) throw httpError(404, 'Kanal nicht gefunden');
+  return id;
+}
+
+async function subscribedState(channelId, info) {
+  if (isSignedIn() && info) {
+    const btn = findNode(info.page || info, 'SubscribeButton');
+    if (btn && typeof btn.subscribed === 'boolean') return btn.subscribed;
+  }
+  return store.isSubscribed(channelId);
+}
+
+function channelHeader(channel, id) {
+  const m = channel.metadata || {};
+  const h = channel.header;
+  const out = {
+    id: m.external_id || id,
+    name: m.title || '',
+    description: m.description || '',
+    avatar: thumb(m.avatar || m.thumbnail, 240),
+    banner: '',
+    handle: '',
+    subscribers: '',
+    videos: '',
+    verified: false,
+    subscribed: store.isSubscribed(m.external_id || id),
+    tabs: [],
+    rss: m.rss_url || ''
+  };
+  if (m.vanity_channel_url) {
+    const hm = m.vanity_channel_url.match(/\/(@[^/?]+)/);
+    if (hm) out.handle = decodeURIComponent(hm[1]);
+  }
+  try {
+    if (h?.type === 'PageHeader') {
+      const c = h.content;
+      out.name = txt(c?.title?.text) || out.name;
+      out.banner = thumb(c?.banner?.image, 2560);
+      const av = c?.image?.avatar?.image;
+      if (av) out.avatar = thumb(av, 240);
+      const parts = (c?.metadata?.metadata_rows || []).flatMap((r) => (r.metadata_parts || []).map((p) => txt(p.text))).filter(Boolean);
+      for (const p of parts) {
+        if (p.startsWith('@')) out.handle = p;
+        else if (/abonnent|subscriber/i.test(p)) out.subscribers = p;
+        else if (/video/i.test(p)) out.videos = p;
+      }
+    } else if (h?.type === 'C4TabbedHeader') {
+      out.banner = thumb(h.banner, 2560);
+      out.subscribers = txt(h.subscribers);
+      out.videos = txt(h.videos_count);
+      out.handle = txt(h.channel_handle) || out.handle;
+      out.verified = !!h.author?.is_verified;
+      if (h.author?.thumbnails?.length) out.avatar = thumb(h.author.thumbnails, 240);
+    }
+  } catch {}
+  if (isSignedIn() && channel.subscribe_button && typeof channel.subscribe_button.subscribed === 'boolean') {
+    out.subscribed = channel.subscribe_button.subscribed;
+  }
+  try {
+    const names = channel.tabs || [];
+    const map = { Videos: 'videos', Shorts: 'shorts', Live: 'streams', Playlists: 'playlists', Community: 'posts', Beiträge: 'posts', Posts: 'posts', Podcasts: 'podcasts', Releases: 'releases', Startseite: 'home', Home: 'home', Kanalinfo: 'about', About: 'about' };
+    out.tabs = names.map((n) => map[n]).filter(Boolean);
+  } catch {}
+  if (!out.tabs.length) out.tabs = ['home', 'videos', 'shorts', 'streams', 'playlists', 'posts'];
+  return out;
+}
+
+async function channelAbout(channel, head) {
+  const about = { description: head.description, links: [], country: '', joined: '', views: '', subscribers: head.subscribers, videos: head.videos };
+  try {
+    const a = await channel.getAbout();
+    const meta = findNode(a, 'AboutChannelView') || findNode(a, 'ChannelAboutFullMetadata') || a;
+    about.description = txt(meta.description) || about.description;
+    about.country = txt(meta.country);
+    about.joined = txt(meta.joined_date);
+    about.views = txt(meta.view_count);
+    about.subscribers = txt(meta.subscriber_count) || about.subscribers;
+    about.videos = txt(meta.video_count) || about.videos;
+    for (const l of meta.links || meta.primary_links || []) {
+      const title = txt(l.title);
+      const url = txt(l.link) || l.endpoint?.payload?.url || '';
+      if (title || url) about.links.push({ title, url: url.startsWith('http') ? url : 'https://' + url, favicon: thumb(l.favicon, 32) });
+    }
+  } catch {}
+  about.descriptionHtml = textToHtml(about.description);
+  return about;
+}
+
+async function watchData(info, id) {
+  const b = info.basic_info || {};
+  const p = info.primary_info;
+  const s = info.secondary_info;
+  const owner = s?.owner;
+  const channelId = owner?.author?.id || b.channel_id || '';
+
+  // Kapitel aus der Fortschrittsleiste oder dem Beschreibungs-Panel.
+  const chapters = [];
+  const chapterNodes = [];
+  walkType(info.player_overlays, 'Chapter', chapterNodes);
+  if (chapterNodes.length) {
+    for (const c of chapterNodes) chapters.push({ title: txt(c.title), start: Math.floor((c.time_range_start_millis || 0) / 1000), thumbnail: thumb(c.thumbnail, 320) });
+  } else {
+    const macro = [];
+    walkType(info.engagement_panels, 'MacroMarkersListItem', macro);
+    for (const m of macro) {
+      const start = m.on_tap_endpoint?.payload?.startTimeSeconds;
+      if (start != null) chapters.push({ title: txt(m.title), start: Number(start), thumbnail: thumb(m.thumbnail, 320) });
+    }
+  }
+  const seenStarts = new Set();
+  const uniqueChapters = chapters.filter((c) => !seenStarts.has(c.start) && seenStarts.add(c.start)).sort((a, c) => a.start - c.start);
+
+  const heat = (info.heat_map?.heat_markers || []).map((m) => [m.time_range_start_millis / 1000, m.heat_marker_intensity_score_normalized]);
+
+  let playlist = null;
+  if (info.playlist) {
+    const pl = info.playlist;
+    playlist = {
+      id: pl.id,
+      title: txt(pl.title),
+      author: txt(pl.author),
+      current: pl.current_index ?? null,
+      total: pl.total_items ?? null,
+      items: collectItems(pl.contents)
+    };
+  }
+
+  const subButton = s?.subscribe_button;
+  const subscribed = isSignedIn() && subButton && typeof subButton.subscribed === 'boolean' ? subButton.subscribed : store.isSubscribed(channelId);
+  const descriptionHtml = s?.description ? textToHtml(s.description) : escapeHtml(b.short_description || '').replace(/\n/g, '<br>');
+
+  const related = collectItems(info.watch_next_feed);
+  let commentCount = '';
+  try {
+    commentCount = txt(info.comments_entry_point_header?.comment_count);
+  } catch {}
+
+  const metadataRows = [];
+  try {
+    for (const r of s?.metadata?.rows || []) {
+      const title = txt(r.title);
+      const contents = (r.contents || []).map(txt).filter(Boolean).join(', ');
+      if (title && contents) metadataRows.push({ title, value: contents });
+    }
+  } catch {}
+
+  return {
+    id,
+    title: txt(p?.title) || b.title || '',
+    views: txt(p?.view_count?.view_count) || (b.view_count != null ? `${Number(b.view_count).toLocaleString('de-DE')} Aufrufe` : ''),
+    shortViews: txt(p?.view_count?.short_view_count),
+    viewCount: b.view_count ?? null,
+    published: txt(p?.published) || b.publish_date || '',
+    relativeDate: txt(p?.relative_date),
+    likes: b.like_count ?? null,
+    liked: !!b.is_liked || (!isSignedIn() && store.listOf('liked').some((v) => v.id === id)),
+    disliked: !!b.is_disliked,
+    duration: b.duration || 0,
+    durationText: formatDuration(b.duration),
+    live: !!b.is_live,
+    upcoming: !!b.is_upcoming,
+    category: b.category || '',
+    keywords: b.keywords || [],
+    superTitle: p?.super_title_link ? textToHtml(p.super_title_link) : '',
+    channel: {
+      id: channelId,
+      name: owner?.author?.name || b.author || '',
+      avatar: thumb(owner?.author?.thumbnails, 176),
+      subscribers: txt(owner?.subscriber_count),
+      verified: !!owner?.author?.is_verified
+    },
+    subscribed,
+    descriptionHtml,
+    metadataRows,
+    chapters: uniqueChapters,
+    heat,
+    playlist,
+    related,
+    relatedCont: info.wn_has_continuation ? saveCont(info, 'related') : null,
+    commentCount,
+    thumbnail: videoThumb(id, 'maxresdefault'),
+    position: store.getPosition(id),
+    autoplayId: info.autoplay_video_endpoint?.payload?.videoId || related.find((r) => r.type === 'video')?.id || null
+  };
+}

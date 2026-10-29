@@ -1,0 +1,74 @@
+{
+  "contents": {
+    "twoColumnBrowseResultsRenderer": {
+      "tabs": [{
+        "tabRenderer": {
+          "selected": true,
+          "title": "Start",
+          "content": {
+            "richGridRenderer": {
+              "contents": [
+                { "richItemRenderer": { "content": { "adSlotRenderer": { "slotId": "ad1", "fulfillmentContent": { "fulfilledLayout": { "inFeedAdLayoutRenderer": { "adLayoutMetadata": {} } } } } } } },
+                { "richItemRenderer": { "content": { "videoRenderer": {
+                  "videoId": "dQw4w9WgXcQ",
+                  "thumbnail": { "thumbnails": [ { "url": "https://i.ytimg.com/vi/dQw4w9WgXcQ/hq720.jpg", "width": 720, "height": 404 } ] },
+                  "title": { "runs": [ { "text": "Never Gonna Give You Up" } ] },
+                  "longBylineText": { "runs": [ { "text": "Rick Astley", "navigationEndpoint": { "browseEndpoint": { "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw", "canonicalBaseUrl": "/@RickAstleyYT" } } } ] },
+                  "ownerText": { "runs": [ { "text": "Rick Astley", "navigationEndpoint": { "browseEndpoint": { "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw", "canonicalBaseUrl": "/@RickAstleyYT" } } } ] },
+                  "shortBylineText": { "runs": [ { "text": "Rick Astley", "navigationEndpoint": { "browseEndpoint": { "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw", "canonicalBaseUrl": "/@RickAstleyYT" } } } ] },
+                  "publishedTimeText": { "simpleText": "vor 15 Jahren" },
+                  "lengthText": { "simpleText": "3:33" },
+                  "viewCountText": { "simpleText": "1.700.000.000 Aufrufe" },
+                  "shortViewCountText": { "simpleText": "1,7 Mrd. Aufrufe" },
+                  "channelThumbnailSupportedRenderers": { "channelThumbnailWithLinkRenderer": { "thumbnail": { "thumbnails": [ { "url": "https://yt3.ggpht.com/rick.jpg", "width": 68, "height": 68 } ] }, "navigationEndpoint": { "browseEndpoint": { "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw" } } } }
+                } } } },
+                { "richSectionRenderer": { "content": { "richShelfRenderer": {
+                  "title": { "runs": [ { "text": "Shorts" } ] },
+                  "contents": [
+                    { "richItemRenderer": { "content": { "shortsLockupViewModel": {
+                      "entityId": "shorts-shelf-item-aaaaaaaaaaa",
+                      "accessibilityText": "Lustiges Short, 1 Mio. Aufrufe",
+                      "thumbnail": { "sources": [ { "url": "https://i.ytimg.com/vi/aaaaaaaaaaa/oar2.jpg", "width": 405, "height": 720 } ] },
+                      "onTap": { "innertubeCommand": { "reelWatchEndpoint": { "videoId": "aaaaaaaaaaa" } } },
+                      "overlayMetadata": { "primaryText": { "content": "Lustiges Short" }, "secondaryText": { "content": "1 Mio. Aufrufe" } }
+                    } } } },
+                    { "richItemRenderer": { "content": { "shortsLockupViewModel": {
+                      "entityId": "shorts-shelf-item-bbbbbbbbbbb",
+                      "thumbnail": { "sources": [ { "url": "https://i.ytimg.com/vi/bbbbbbbbbbb/oar2.jpg", "width": 405, "height": 720 } ] },
+                      "onTap": { "innertubeCommand": { "reelWatchEndpoint": { "videoId": "bbbbbbbbbbb" } } },
+                      "overlayMetadata": { "primaryText": { "content": "Zweites Short" }, "secondaryText": { "content": "20 Tsd. Aufrufe" } }
+                    } } } }
+                  ]
+                } } } },
+                { "richItemRenderer": { "content": { "lockupViewModel": {
+                  "contentId": "abcdefghijk",
+                  "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+                  "contentImage": { "thumbnailViewModel": {
+                    "image": { "sources": [ { "url": "https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg", "width": 480, "height": 270 } ] },
+                    "overlays": [ { "thumbnailOverlayBadgeViewModel": { "thumbnailBadges": [ { "thumbnailBadgeViewModel": { "text": "12:34", "badgeStyle": "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT" } } ], "position": "THUMBNAIL_OVERLAY_BADGE_POSITION_BOTTOM_END" } } ]
+                  } },
+                  "metadata": { "lockupMetadataViewModel": {
+                    "title": { "content": "Neues Layout Video" },
+                    "image": { "decoratedAvatarViewModel": {
+                      "avatar": { "avatarViewModel": { "image": { "sources": [ { "url": "https://yt3.ggpht.com/chan.jpg", "width": 68, "height": 68 } ] } } },
+                      "rendererContext": { "commandContext": { "onTap": { "innertubeCommand": { "browseEndpoint": { "browseId": "UCabcdefghijklmnopqrstuv" } } } } }
+                    } },
+                    "metadata": { "contentMetadataViewModel": {
+                      "metadataRows": [
+                        { "metadataParts": [ { "text": { "content": "Testkanal", "commandRuns": [ { "startIndex": 0, "length": 9, "onTap": { "innertubeCommand": { "browseEndpoint": { "browseId": "UCabcdefghijklmnopqrstuv" } } } } ] } } ] },
+                        { "metadataParts": [ { "text": { "content": "5.000 Aufrufe" } }, { "text": { "content": "vor 2 Tagen" } } ] }
+                      ],
+                      "delimiter": " • "
+                    } }
+                  } },
+                  "rendererContext": {}
+                } } } },
+                { "continuationItemRenderer": { "trigger": "CONTINUATION_TRIGGER_ON_ITEM_SHOWN", "continuationEndpoint": { "continuationCommand": { "token": "abc", "request": "CONTINUATION_REQUEST_TYPE_BROWSE" } } } }
+              ]
+            }
+          }
+        }
+      }]
+    }
+  }
+}

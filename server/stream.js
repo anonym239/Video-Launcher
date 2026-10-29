@@ -1,0 +1,331 @@
+// Ermittelt abspielbare Streams (DASH / HLS / progressiv) und leitet
+// Video-Daten über den Handy-Server weiter (kein CORS-Problem, keine Werbung).
+import { spawn, spawnSync } from 'node:child_process';
+import { Readable } from 'node:stream';
+import { Constants } from 'youtubei.js';
+import { getYT } from './yt.js';
+import { store } from './store.js';
+import { thumb, txt } from './normalize.js';
+
+const CACHE_MS = 60 * 60 * 1000;
+const cache = new Map(); // videoId -> { at, info, client, source, data }
+
+const PROXY_BASE = 'http://vl.local';
+const vp = (url, extra = '') => `/vp?u=${encodeURIComponent(url)}${extra}`;
+
+// Nur diese Hosts dürfen über /vp geladen werden (kein offener Proxy).
+export function isAllowedUpstream(u) {
+  let url;
+  try {
+    url = new URL(u);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:') return false;
+  const h = url.hostname;
+  if (h.endsWith('.googlevideo.com')) return true;
+  if (h === 'manifest.googlevideo.com') return true;
+  if ((h === 'www.youtube.com' || h === 'youtube.com') && url.pathname.startsWith('/api/timedtext')) return true;
+  return false;
+}
+
+const UA_BY_C = {
+  IOS: Constants.CLIENTS.IOS?.USER_AGENT,
+  ANDROID: Constants.CLIENTS.ANDROID?.USER_AGENT,
+  ANDROID_VR: Constants.CLIENTS.ANDROID_VR?.USER_AGENT
+};
+const DEFAULT_UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
+
+function upstreamHeaders(url, range) {
+  let c = '';
+  try {
+    c = new URL(url).searchParams.get('c') || '';
+  } catch {}
+  const h = {
+    accept: '*/*',
+    'user-agent': UA_BY_C[c] || DEFAULT_UA,
+    origin: 'https://www.youtube.com',
+    referer: 'https://www.youtube.com/'
+  };
+  if (range) h.range = range;
+  return h;
+}
+
+let ytdlpPath;
+function ytdlp() {
+  if (ytdlpPath === undefined) {
+    const r = spawnSync('yt-dlp', ['--version'], { encoding: 'utf8' });
+    ytdlpPath = r.status === 0 ? 'yt-dlp' : null;
+  }
+  return ytdlpPath;
+}
+
+function playable(info) {
+  const st = info?.playability_status?.status;
+  if (st && st !== 'OK') return false;
+  const sd = info?.streaming_data;
+  return !!(sd && (sd.adaptive_formats?.length || sd.formats?.length || sd.hls_manifest_url || sd.dash_manifest_url));
+}
+
+async function viaYoutubei(id) {
+  const yt = await getYT();
+  const clients = store.settings.clients?.length ? store.settings.clients : ['ANDROID_VR', 'TV', 'IOS', 'WEB'];
+  let lastReason = '';
+  for (const client of clients) {
+    try {
+      const info = await yt.getBasicInfo(id, { client });
+      if (!playable(info)) {
+        lastReason = info?.playability_status?.reason || info?.playability_status?.status || 'nicht abspielbar';
+        if (info?.playability_status?.status === 'LOGIN_REQUIRED' && /privat|private/i.test(lastReason)) break;
+        continue;
+      }
+      // Testweise eine URL entschlüsseln – schlägt das fehl, nächsten Client probieren.
+      const f = info.streaming_data.adaptive_formats?.[0] || info.streaming_data.formats?.[0];
+      if (f) await f.decipher(yt.session.player);
+      return { info, client, source: 'youtubei' };
+    } catch (e) {
+      lastReason = e?.message || String(e);
+    }
+  }
+  const err = new Error(lastReason || 'Video nicht verfügbar');
+  err.status = 403;
+  throw err;
+}
+
+function viaYtdlp(id) {
+  return new Promise((resolve, reject) => {
+    const bin = ytdlp();
+    if (!bin) return reject(new Error('yt-dlp nicht installiert'));
+    const p = spawn(bin, ['-J', '--no-warnings', '--no-playlist', '--', `https://www.youtube.com/watch?v=${id}`]);
+    let out = '';
+    let err = '';
+    p.stdout.on('data', (d) => (out += d));
+    p.stderr.on('data', (d) => (err += d));
+    p.on('error', reject);
+    p.on('close', (code) => {
+      if (code !== 0) return reject(new Error(err.trim().split('\n').pop() || 'yt-dlp Fehler'));
+      try {
+        resolve({ data: JSON.parse(out), source: 'yt-dlp', client: 'yt-dlp' });
+      } catch (e) {
+        reject(e);
+      }
+    });
+  });
+}
+
+export async function resolveVideo(id, { fresh = false } = {}) {
+  const hit = cache.get(id);
+  if (!fresh && hit && Date.now() - hit.at < CACHE_MS) return hit;
+  let res;
+  try {
+    res = await viaYoutubei(id);
+  } catch (e) {
+    if (!ytdlp()) throw e;
+    try {
+      res = await viaYtdlp(id);
+    } catch {
+      throw e;
+    }
+  }
+  res.at = Date.now();
+  cache.set(id, res);
+  if (cache.size > 200) cache.delete(cache.keys().next().value);
+  return res;
+}
+
+function qualityLabel(f) {
+  return f.quality_label || (f.height ? `${f.height}p` : '') || f.quality || '';
+}
+
+export async function streamsFor(id) {
+  const r = await resolveVideo(id);
+  if (r.source === 'yt-dlp') return streamsFromYtdlp(id, r);
+  const yt = await getYT();
+  const { info } = r;
+  const sd = info.streaming_data;
+  const basic = info.basic_info || {};
+  const live = !!basic.is_live;
+
+  const progressive = [];
+  for (const f of sd.formats || []) {
+    try {
+      const url = await f.decipher(yt.session.player);
+      if (url) progressive.push({ itag: f.itag, label: qualityLabel(f), mime: f.mime_type, url: vp(url) });
+    } catch {}
+  }
+  const audio = [];
+  for (const f of (sd.adaptive_formats || []).filter((x) => x.has_audio && !x.has_video && /mp4/.test(x.mime_type))) {
+    try {
+      const url = await f.decipher(yt.session.player);
+      if (url) audio.push({ itag: f.itag, label: `${Math.round((f.bitrate || 0) / 1000)} kbit/s`, mime: f.mime_type, url: vp(url) });
+    } catch {}
+  }
+
+  const captions = (info.captions?.caption_tracks || []).map((c) => ({
+    lang: c.language_code,
+    label: txt(c.name) + (c.kind === 'asr' ? ' (automatisch)' : ''),
+    auto: c.kind === 'asr',
+    url: vp(addParam(c.base_url, 'fmt', 'vtt'))
+  }));
+
+  let storyboard = null;
+  const boards = info.storyboards?.boards;
+  if (Array.isArray(boards) && boards.length) {
+    const b = boards[boards.length - 1];
+    storyboard = {
+      template: b.template_url,
+      width: b.thumbnail_width,
+      height: b.thumbnail_height,
+      count: b.thumbnail_count,
+      interval: b.interval,
+      columns: b.columns,
+      rows: b.rows
+    };
+  }
+
+  const hasAdaptive = (sd.adaptive_formats || []).length > 0 && !live;
+  return {
+    id,
+    client: r.client,
+    source: r.source,
+    live,
+    duration: basic.duration || 0,
+    title: basic.title || '',
+    thumbnail: thumb(basic.thumbnail, 1280),
+    dash: hasAdaptive ? `/api/manifest/${id}.mpd` : null,
+    hls: sd.hls_manifest_url ? vp(sd.hls_manifest_url) : null,
+    progressive,
+    audio,
+    captions,
+    storyboard
+  };
+}
+
+function streamsFromYtdlp(id, r) {
+  const d = r.data;
+  const formats = d.formats || [];
+  const progressive = formats
+    .filter((f) => f.vcodec && f.vcodec !== 'none' && f.acodec && f.acodec !== 'none' && /^https?$/.test(f.protocol || '') && f.url)
+    .map((f) => ({ itag: Number(f.format_id) || 0, label: f.height ? `${f.height}p` : f.format_note || '', mime: `video/${f.ext}`, url: vp(f.url) }));
+  const hlsFormat = formats.find((f) => /m3u8/.test(f.protocol || '') && f.manifest_url);
+  const audio = formats
+    .filter((f) => f.vcodec === 'none' && f.acodec && f.acodec !== 'none' && f.ext === 'm4a' && f.url)
+    .map((f) => ({ itag: Number(f.format_id) || 0, label: `${Math.round(f.abr || 0)} kbit/s`, mime: 'audio/mp4', url: vp(f.url) }));
+  const captions = Object.entries(d.subtitles || {}).flatMap(([lang, list]) => {
+    const v = list.find((x) => x.ext === 'vtt');
+    return v ? [{ lang, label: lang, auto: false, url: vp(v.url) }] : [];
+  });
+  return {
+    id,
+    client: 'yt-dlp',
+    source: 'yt-dlp',
+    live: !!d.is_live,
+    duration: d.duration || 0,
+    title: d.title || '',
+    thumbnail: d.thumbnail || '',
+    dash: null,
+    hls: hlsFormat ? vp(hlsFormat.manifest_url) : null,
+    progressive,
+    audio,
+    captions,
+    storyboard: null
+  };
+}
+
+function addParam(url, k, v) {
+  try {
+    const u = new URL(url);
+    u.searchParams.set(k, v);
+    return u.href;
+  } catch {
+    return url;
+  }
+}
+
+export async function dashManifest(id) {
+  const r = await resolveVideo(id);
+  if (r.source !== 'youtubei') throw Object.assign(new Error('Kein DASH verfügbar'), { status: 404 });
+  const mpd = await r.info.toDash({
+    url_transformer: (url) => new URL(PROXY_BASE + vp(url.toString()))
+  });
+  return mpd.split(PROXY_BASE).join('');
+}
+
+// HLS-Playlists umschreiben, damit auch Segmente über den Proxy laufen.
+export function rewriteM3U8(body, baseUrl) {
+  const abs = (u) => {
+    try {
+      return new URL(u, baseUrl).href;
+    } catch {
+      return u;
+    }
+  };
+  return body
+    .split('\n')
+    .map((line) => {
+      const l = line.trim();
+      if (!l) return line;
+      if (l.startsWith('#')) {
+        return line.replace(/URI="([^"]+)"/g, (m, u) => `URI="${vp(abs(u))}"`);
+      }
+      return vp(abs(l));
+    })
+    .join('\n');
+}
+
+const PASS_HEADERS = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'last-modified', 'etag'];
+
+// /vp?u=<googlevideo-URL> – leitet Bytes inkl. Range-Anfragen durch.
+export async function proxy(req, res, query) {
+  const target = query.get('u');
+  if (!target || !isAllowedUpstream(target)) {
+    res.writeHead(400, { 'content-type': 'text/plain' });
+    return res.end('Ungültige Ziel-URL');
+  }
+  const ctrl = new AbortController();
+  req.on('close', () => ctrl.abort());
+  let upstream;
+  let url = target;
+  try {
+    // Manuelle Weiterleitungen, damit jedes Ziel geprüft wird.
+    for (let i = 0; i < 5; i++) {
+      upstream = await fetch(url, { headers: upstreamHeaders(url, req.headers.range), redirect: 'manual', signal: ctrl.signal });
+      if (upstream.status >= 300 && upstream.status < 400 && upstream.headers.get('location')) {
+        const next = new URL(upstream.headers.get('location'), url).href;
+        if (!isAllowedUpstream(next)) throw new Error('Weiterleitung auf unerlaubten Host');
+        url = next;
+        continue;
+      }
+      break;
+    }
+  } catch (e) {
+    if (ctrl.signal.aborted) return;
+    res.writeHead(502, { 'content-type': 'text/plain' });
+    return res.end('Upstream-Fehler: ' + e.message);
+  }
+
+  const type = upstream.headers.get('content-type') || '';
+  if (/mpegurl/i.test(type) || /\.m3u8(\?|$)|\/hls_(playlist|variant)\//.test(new URL(url).pathname)) {
+    const text = await upstream.text();
+    res.writeHead(upstream.status, { 'content-type': 'application/vnd.apple.mpegurl', 'cache-control': 'no-store' });
+    return res.end(rewriteM3U8(text, url));
+  }
+
+  const headers = { 'cache-control': 'private, max-age=3600' };
+  for (const h of PASS_HEADERS) {
+    const v = upstream.headers.get(h);
+    if (v) headers[h] = v;
+  }
+  const dl = query.get('dl');
+  if (dl) headers['content-disposition'] = `attachment; filename*=UTF-8''${encodeURIComponent(dl)}`;
+  res.writeHead(upstream.status, headers);
+  if (!upstream.body || req.method === 'HEAD') return res.end();
+  const body = Readable.fromWeb(upstream.body);
+  body.on('error', () => res.destroy());
+  body.pipe(res);
+}
+
+export function invalidate(id) {
+  if (id) cache.delete(id);
+  else cache.clear();
+}

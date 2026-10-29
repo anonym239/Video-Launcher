@@ -1,0 +1,19 @@
+{
+  "name": "video-launcher",
+  "version": "1.0.0",
+  "description": "Werbefreier YouTube-Client, der komplett auf dem eigenen Handy (Termux) läuft – ohne API-Key.",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "shaka-player": "4.12.6",
+    "youtubei.js": "18.3.0"
+  }
+}
