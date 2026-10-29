@@ -14,6 +14,8 @@
 static const char *LOG_TAG = "VideoLauncherNode";
 static int pipe_stdout[2];
 static int pipe_stderr[2];
+static FILE *log_file = nullptr;
+static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void *log_thread(void *arg) {
     int fd = *static_cast<int *>(arg);
@@ -24,11 +26,20 @@ static void *log_thread(void *arg) {
         if (buf[n - 1] == '\n') --n;
         buf[n] = 0;
         __android_log_write(prio, LOG_TAG, buf);
+        // Zusätzlich in eine Datei, damit die App Fehler anzeigen kann.
+        if (log_file) {
+            pthread_mutex_lock(&log_mutex);
+            fprintf(log_file, "%s\n", buf);
+            fflush(log_file);
+            pthread_mutex_unlock(&log_mutex);
+        }
     }
     return nullptr;
 }
 
 static void redirect_output() {
+    const char *path = getenv("VL_LOG_FILE");
+    if (path) log_file = fopen(path, "a");
     setvbuf(stdout, nullptr, _IONBF, 0);
     setvbuf(stderr, nullptr, _IONBF, 0);
     if (pipe(pipe_stdout) == 0) dup2(pipe_stdout[1], STDOUT_FILENO);

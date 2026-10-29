@@ -1270,3 +1270,6 @@ body.android-pip .player .p-video { width: 100vw !important; height: 100vh !impo
 .notice p { margin-bottom: 12px; color: var(--text-2); }
 .notice b { color: var(--text); }
 .notice-dialog .dialog-close { display: none; }
+
+/* Shorts-Symbol in der Navigation immer rot, wenn aktiv (wie in der App). */
+.pivot-item[data-name='shorts'].active .when-active, .mini-item[data-name='shorts'].active .when-active, .guide-item[data-name='shorts'].active .when-active { fill: var(--red); }

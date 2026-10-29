@@ -180,6 +180,10 @@ function lanAddresses() {
     .map((i) => i.address);
 }
 
+// Auf dem Handy darf ein einzelner Fehler nie den ganzen Server (und damit die App) beenden.
+process.on('uncaughtException', (e) => console.error('[fehler]', e?.stack || e));
+process.on('unhandledRejection', (e) => console.error('[fehler] unbehandelt:', e?.stack || e));
+
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
   const server = createServer();

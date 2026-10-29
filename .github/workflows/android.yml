@@ -86,16 +86,62 @@ jobs:
           name: VideoLauncher-APK
           path: dist/*.apk
 
+  # Startet die APK auf einem echten Android-Emulator und prüft, ob sie läuft.
+  smoketest:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: VideoLauncher-APK
+          path: dist
+
+      - name: KVM aktivieren
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: App im Emulator starten (Android 14)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: bash scripts/android-smoketest.sh dist/VideoLauncher.apk
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Smoketest
+          path: smoketest/
+
+  release:
+    needs: [build, smoketest]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: VideoLauncher-APK
+          path: dist
+
       - name: Release "latest" aktualisieren
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest dist/*.apk \
+          gh release create latest dist/VideoLauncher.apk \
             --target "$GITHUB_SHA" \
             --title "Video Launcher 1.0.${{ github.run_number }}" \
             --latest \
             --notes "Einfach **VideoLauncher.apk** herunterladen, öffnen und installieren – fertig. Funktioniert auf allen Android-Handys ab Android 7.
 
           Beim ersten Mal fragt Android, ob Installationen aus dieser Quelle erlaubt sind → erlauben.
+          Diese Version wurde automatisch auf einem Android-14-Emulator gestartet und getestet.
           Unabhängiges Open-Source-Projekt, nicht mit YouTube/Google verbunden."

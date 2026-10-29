@@ -58,11 +58,8 @@ public class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
         }
-        Intent svc = new Intent(this, NodeService.class);
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(svc);
-        else startService(svc);
-        // Falls der Dienst (z. B. ohne Benachrichtigungsrecht) nicht startet, Server direkt starten.
-        NodeBridge.start(this);
+        installCrashLogger();
+        startServer();
 
         root = new FrameLayout(this);
         root.setBackgroundColor(Color.parseColor("#0f0f0f"));
@@ -80,6 +77,71 @@ public class MainActivity extends Activity {
         waitForServer();
     }
 
+    /** Startet den Server-Dienst (eigener Prozess ":node"). */
+    private void startServer() {
+        Intent svc = new Intent(this, NodeService.class);
+        try {
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(svc);
+            else startService(svc);
+        } catch (Exception e) {
+            // z. B. wenn Android Vordergrunddienste gerade nicht erlaubt → normal starten.
+            try {
+                startService(svc);
+            } catch (Exception e2) {
+                lastUiError = e2.toString();
+            }
+        }
+    }
+
+    private String lastUiError = null;
+
+    /** Schreibt Abstürze der Oberfläche in eine Datei, damit sie beim nächsten Start angezeigt werden. */
+    private void installCrashLogger() {
+        final Thread.UncaughtExceptionHandler prev = Thread.getDefaultUncaughtExceptionHandler();
+        final java.io.File crash = new java.io.File(getFilesDir(), "ui-crash.txt");
+        Thread.setDefaultUncaughtExceptionHandler((thread, ex) -> {
+            try (java.io.PrintWriter pw = new java.io.PrintWriter(new java.io.FileWriter(crash))) {
+                ex.printStackTrace(pw);
+            } catch (java.io.IOException ignored) {
+            }
+            if (prev != null) prev.uncaughtException(thread, ex);
+        });
+        if (crash.exists()) {
+            try {
+                lastUiError = "Letzter Absturz:\n" + NodeBridge.readFile(crash);
+            } catch (java.io.IOException ignored) {
+            }
+            //noinspection ResultOfMethodCallIgnored
+            crash.delete();
+        }
+    }
+
+    private void showError(String msg) {
+        String log = NodeBridge.getLogTail(this, 4000);
+        final String report = msg + "\n\n--- Log ---\n" + log + (lastUiError != null ? "\n\n" + lastUiError : "");
+        splashText.setText(getString(R.string.start_failed, msg) + "\n\n" + log);
+        splashText.setTextIsSelectable(true);
+        if (splashButtons.getChildCount() > 0) return;
+        android.widget.Button copy = new android.widget.Button(this);
+        copy.setText(R.string.copy_report);
+        copy.setOnClickListener(v -> {
+            android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("Video Launcher Fehlerbericht", report));
+            Toast.makeText(this, R.string.copied, Toast.LENGTH_SHORT).show();
+        });
+        android.widget.Button retry = new android.widget.Button(this);
+        retry.setText(R.string.retry);
+        retry.setOnClickListener(v -> {
+            splashText.setText(R.string.starting);
+            startServer();
+            waitForServer();
+        });
+        splashButtons.addView(copy);
+        splashButtons.addView(retry);
+    }
+
+    private LinearLayout splashButtons;
+
     private View buildSplash() {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -91,7 +153,13 @@ public class MainActivity extends Activity {
         splashText.setPadding(48, 32, 48, 0);
         splashText.setGravity(Gravity.CENTER);
         splashText.setText(R.string.starting);
-        box.addView(splashText);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.addView(splashText);
+        box.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        splashButtons = new LinearLayout(this);
+        splashButtons.setGravity(Gravity.CENTER);
+        box.addView(splashButtons);
+        box.setPadding(0, 160, 0, 80);
         return box;
     }
 
@@ -174,18 +242,18 @@ public class MainActivity extends Activity {
                     ui.post(this::showApp);
                     return;
                 }
-                String err = NodeBridge.getStartError();
+                String err = NodeBridge.getStartError(this);
                 if (err != null) {
-                    ui.post(() -> splashText.setText(getString(R.string.start_failed, err)));
+                    ui.post(() -> showError(err));
                     return;
                 }
                 try {
-                    Thread.sleep(250);
+                    Thread.sleep(300);
                 } catch (InterruptedException e) {
                     return;
                 }
             }
-            ui.post(() -> splashText.setText(getString(R.string.start_failed, "Zeitüberschreitung")));
+            ui.post(() -> showError("Zeitüberschreitung beim Start"));
         }, "wait-server").start();
     }
 

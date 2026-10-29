@@ -10,8 +10,8 @@ const P = {
   bellOff: 'M20 18.69L7.84 6.14 5.27 3.49 4 4.76l2.8 2.8v.01c-.52.99-.8 2.16-.8 3.42v5l-2 2v1h13.73l2 2L21 19.72l-1-1.03zM12 22c1.11 0 2-.89 2-2h-4c0 1.11.89 2 2 2zm6-7.32V11c0-3.08-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68c-.15.03-.29.08-.42.12-.1.03-.2.07-.3.11h-.01c-.01 0-.01 0-.02.01-.23.09-.46.2-.68.31 0 0-.01 0-.01.01L18 14.68z',
   home: 'M12 5.69l5 4.5V18h-2v-6H9v6H7v-7.81l5-4.5M12 3L2 12h3v8h6v-6h2v6h6v-8h3L12 3z',
   homeFilled: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
-  shorts: 'M17 1H7c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-2-2-2zm0 20H7V3h10v18zm-7-5V8l6 4-6 4z',
-  shortsFilled: 'M17 1H7c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-2-2-2zm-7 15V8l6 4-6 4z',
+  shorts: 'M8 2h9a3 3 0 0 1 3 3v12h-2V5a1 1 0 0 0-1-1H8zM7 6h7a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3zm0 2a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1zM8.5 10.5v7l5.5-3.5z',
+  shortsFilled: 'M8 2h9a3 3 0 0 1 3 3v12h-2V5a1 1 0 0 0-1-1H8zM7 6h7a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3zM8.5 10.5v7l5.5-3.5z',
   subs: 'M4 6h16v2H4zm2-4h12v2H6zm14 8H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2zm0 10H4v-8h16v8zm-10-7.27v6.53L16 16z',
   subsFilled: 'M20 8H4V6h16v2zm-2-6H6v2h12V2zm4 10v8c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2v-8c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2zm-6 4l-6-3.27v6.53L16 16z',
   library: 'M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zM12 5.5v9l6-4.5z',
@@ -86,10 +86,14 @@ const P = {
   expand: 'M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z'
 };
 
+// Symbole mit Aussparungen (z. B. Play-Dreieck im Shorts-Symbol).
+const EVENODD = new Set(['shorts', 'shortsFilled']);
+
 export function icon(name, cls = '') {
   const d = P[name];
   if (!d) return '';
-  return `<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${d}"/></svg>`;
+  const rule = EVENODD.has(name) ? ' fill-rule="evenodd"' : '';
+  return `<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path${rule} d="${d}"/></svg>`;
 }
 
 export const ICON_NAMES = Object.keys(P);
