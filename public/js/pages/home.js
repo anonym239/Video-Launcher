@@ -29,13 +29,12 @@ export default async function home({ node, signal }) {
     }
     appendItems(grid, data.items, 'grid');
     let cont = data.cont;
-    const kind = data.contKind === 'search' ? '/api/search' : '/api/home';
     if (cont) {
       scroller = infinite(grid, async () => {
-        const more = await api(kind + qs({ cont }), { signal });
+        const more = await api('/api/home' + qs({ cont }), { signal });
         appendItems(grid, more.items, 'grid');
         cont = more.cont;
-        return !!cont;
+        return !!cont && more.items.length > 0;
       }, { signal });
     }
   }

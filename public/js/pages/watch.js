@@ -323,8 +323,9 @@ function renderRelated(node, data, signal) {
     infinite(list, async () => {
       const more = await api('/api/related' + qs({ cont }), { signal });
       appendItems(list, more.items, variant());
+      data.related.push(...more.items);
       cont = more.cont;
-      return !!cont;
+      return !!cont && more.items.length > 0;
     }, { signal });
   }
 }

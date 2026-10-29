@@ -1,5 +1,5 @@
 // Der Videoplayer: eigene YouTube-ähnliche Steuerung auf Basis von <video> + Shaka (DASH/HLS).
-import { api, formatTime, el, html, raw, throttle } from './util.js';
+import { api, formatTime, el, html, raw, throttle, reportPlaying } from './util.js';
 import { icon } from './icons.js';
 import { state, setPosition, emit } from './state.js';
 
@@ -700,6 +700,7 @@ export class Player {
       this.#setIcons();
       this.#showControls();
       emit('player:play', this.meta);
+      reportPlaying(true);
     });
     v.addEventListener('playing', () => {
       r.dataset.state = 'playing';
@@ -711,6 +712,7 @@ export class Player {
       r.classList.add('controls-visible');
       this.#savePosition(true);
       emit('player:pause', this.meta);
+      reportPlaying(false);
     });
     v.addEventListener('waiting', () => r.classList.add('buffering'));
     v.addEventListener('canplay', () => r.classList.remove('buffering'));

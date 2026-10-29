@@ -195,3 +195,10 @@ export const storage = {
     } catch {}
   }
 };
+
+// Meldet der Android-App, ob gerade ein Video läuft (Bildschirm anlassen, Bild-im-Bild).
+export function reportPlaying(on) {
+  try {
+    window.VLAndroid?.setPlaying(!!on);
+  } catch {}
+}

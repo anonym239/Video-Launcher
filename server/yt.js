@@ -4,6 +4,9 @@ import path from 'node:path';
 import { Innertube, UniversalCache } from 'youtubei.js';
 import { DATA_DIR, auth, store } from './store.js';
 import { thumb, txt, unwrap } from './normalize.js';
+import { installEvaluator } from './jsruntime.js';
+
+installEvaluator();
 
 let current = null; // Promise<Innertube>
 let pending = null; // laufender Geräte-Login

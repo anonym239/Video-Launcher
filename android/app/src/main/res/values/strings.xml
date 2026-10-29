@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Video Launcher</string>
+    <string name="channel_name">Server</string>
+    <string name="server_running">Läuft im Hintergrund</string>
+    <string name="starting">Wird gestartet…\nBeim ersten Start kann das ein paar Sekunden dauern.</string>
+    <string name="start_failed">Der Server konnte nicht gestartet werden:\n%1$s</string>
+    <string name="download_started">Download gestartet: %1$s</string>
+</resources>

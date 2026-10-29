@@ -53,7 +53,9 @@ export default async function settings({ node }) {
 
     <section class="settings-card about-app">
       <h2>Über</h2>
-      <p>Video Launcher läuft komplett auf deinem Handy: Der Server holt die Inhalte direkt von YouTube, ohne API-Key und ohne Werbung. Videos werden über den lokalen Server gestreamt.</p>
+      <p>Video Launcher läuft komplett auf deinem Gerät: Inhalte werden direkt von den öffentlichen Servern abgerufen – ohne API-Key, ohne Werbung, ohne zentralen Server und ohne Datensammlung.</p>
+      <p class="muted small">Unabhängiges Open-Source-Projekt (MIT-Lizenz), nicht mit YouTube oder Google verbunden. „YouTube“ ist eine Marke von Google LLC und wird hier nur zur Beschreibung der Kompatibilität genannt. Alle Inhalte gehören ihren jeweiligen Urhebern. Nutzung nur privat und auf eigene Verantwortung.</p>
+      <p class="muted small">Verwendete Open-Source-Software: youtubei.js (MIT), Shaka Player (Apache-2.0), Material Icons (Apache-2.0), nodejs-mobile (MIT) – Details in THIRD_PARTY_NOTICES.md.</p>
       <p class="muted small">Tastenkürzel: K/Leertaste Pause · J/L ±10 s · ←/→ ±5 s · F Vollbild · M Ton · C Untertitel · T Kinomodus · I Miniplayer · Umschalt+N Nächstes · / Suche</p>
     </section>
   </div>`.toString();

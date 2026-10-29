@@ -1,5 +1,5 @@
 // Shorts: vertikal wischen, Endlos-Feed, Autoplay in Schleife.
-import { api, el, html, raw, qs, compact } from '../util.js';
+import { api, el, html, raw, qs, compact, reportPlaying } from '../util.js';
 import { icon } from '../icons.js';
 import { avatar, subscribeButton, toast, shareDialog, openMenu, saveDialog, downloadDialog, closeOverlay, isMobile } from '../components.js';
 import { mini } from '../app.js';
@@ -234,6 +234,7 @@ export default async function shorts({ node, params, signal }) {
     if (bar && video.duration) bar.style.width = `${(video.currentTime / video.duration) * 100}%`;
   });
   const syncPause = () => {
+    reportPlaying(!video.paused);
     const slide = scroller.children[active];
     if (!slide) return;
     slide.classList.toggle('paused', video.paused);
@@ -308,6 +309,7 @@ export default async function shorts({ node, params, signal }) {
     closeOverlay();
     document.querySelectorAll('.shorts-comments-layer').forEach((l) => l.remove());
     video.pause();
+    reportPlaying(false);
     shakaPlayer?.destroy().catch(() => {});
     video.removeAttribute('src');
     video.load();

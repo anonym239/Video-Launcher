@@ -153,7 +153,7 @@ code { font-family: ui-monospace, Menlo, monospace; font-size: 0.92em; }
 }
 .mh-start { display: flex; align-items: center; gap: 8px; flex: none; }
 .logo { display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 8px 0 10px; }
-.logo-svg { width: 30px; height: 21px; }
+.logo-svg { width: 26px; height: 26px; }
 .logo-text { font-size: 18px; font-weight: 700; letter-spacing: -0.8px; font-family: 'Roboto Condensed', var(--font); white-space: nowrap; }
 .mh-center { flex: 0 1 728px; display: flex; align-items: center; gap: 12px; min-width: 0; }
 .mh-back { display: none; }
@@ -642,7 +642,7 @@ select option { background: var(--bg-menu); color: var(--text); }
 /* ---- Login ------------------------------------------------------------------------ */
 .login-dialog { width: min(480px, calc(100vw - 32px)); }
 .login-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px; padding: 8px 0 20px; color: var(--text-2); }
-.login-hero svg { width: 64px; height: 46px; }
+.login-hero svg { width: 56px; height: 56px; }
 .login-step { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
 .btn-google { height: 44px; border-radius: 22px; background: #fff; color: #1f1f1f; border: 1px solid #dadce0; font-weight: 500; gap: 12px; }
 .btn-google:hover { background: #f8f9fa; }
@@ -1261,3 +1261,12 @@ select option { background: var(--bg-menu); color: var(--text); }
   .explore-page .chip-bar { padding: 0 12px; }
   .playlists-page .rich-grid { padding: 0 12px; }
 }
+
+/* ---- Android-App: Bild-im-Bild ------------------------------------------------- */
+body.android-pip .masthead, body.android-pip .pivot-bar, body.android-pip .guide, body.android-pip .mini-guide, body.android-pip .p-controls, body.android-pip .p-mini-bar, body.android-pip .toast { display: none !important; }
+body.android-pip .player, body.android-pip .short-slide.active .short-video { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 9999; border-radius: 0 !important; }
+body.android-pip .player .p-video { width: 100vw !important; height: 100vh !important; }
+
+.notice p { margin-bottom: 12px; color: var(--text-2); }
+.notice b { color: var(--text); }
+.notice-dialog .dialog-close { display: none; }

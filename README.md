@@ -1,8 +1,21 @@
 # Video Launcher
 
-Ein werbefreier YouTube-Client, der komplett **auf deinem Handy** läuft. Er braucht keinen API-Key, keinen fremden Server und keine KI. Ein kleiner Node.js-Server in Termux holt die Inhalte direkt von YouTube. Die Oberfläche öffnest du im Browser des Handys. Sie ist der YouTube-App bzw. youtube.com nachgebaut.
+Ein werbefreier Video-Client für YouTube-Inhalte, der komplett **auf deinem Handy** läuft. Er braucht keinen API-Key, keinen fremden Server und keine KI. Es gibt ihn als **Android-App (APK)** oder zum Selbststarten in Termux. Die Oberfläche ist der YouTube-App bzw. youtube.com nachempfunden.
 
-> Hinweis: Das Projekt ist nicht mit YouTube/Google verbunden. Das Logo ist ein eigenes Symbol. Werbefreies Abspielen über Drittanbieter-Clients widerspricht den YouTube-Nutzungsbedingungen. Die Nutzung erfolgt auf eigene Verantwortung und nur für private Zwecke.
+> Unabhängiges Open-Source-Projekt, **nicht mit YouTube oder Google verbunden**. Siehe [Rechtliches](#rechtliches).
+
+## App installieren (APK)
+
+1. Öffne auf dem Handy die Seite **[Releases → latest](https://github.com/anonym239/Video-Launcher/releases/tag/latest)**.
+2. Lade **`VideoLauncher.apk`** herunter (passt für fast alle Handys; ältere 32-Bit-Geräte: `VideoLauncher-armeabi-v7a.apk`).
+3. Öffne die Datei und erlaube einmalig „Installation aus unbekannten Quellen“.
+
+Die APK wird bei jedem Push automatisch von GitHub Actions gebaut (`.github/workflows/android.yml`). Der Server (Node.js) läuft in der App selbst, Termux ist dafür nicht nötig.
+
+In der App:
+- YouTube-Links lassen sich über „Teilen“ oder „Öffnen mit“ direkt an Video Launcher schicken.
+- Videos laufen im Hintergrund weiter. Beim Verlassen der App erscheint Bild-im-Bild.
+- Downloads landen im Download-Ordner.
 
 ## Funktionen
 
@@ -28,8 +41,9 @@ Ein werbefreier YouTube-Client, der komplett **auf deinem Handy** läuft. Er bra
 - „Kein Interesse“ und „Kanal nicht empfehlen“, Wiedergabeverlauf pausieren oder löschen, Backup exportieren und importieren
 - Dunkles, helles oder Gerätedesign; Layout für Handy, Tablet und Desktop
 - **Keine Werbung**: Werbeblöcke, gesponserte Inhalte und Shopping-Elemente werden herausgefiltert. Die Videos kommen ohne Werbeclips.
+- **Endlos schauen**: Startseite und „Ähnliche Videos“ enden nie. Wenn YouTube keine weiteren Seiten liefert, lädt die App immer neue Videos aus den Empfehlungen der zuletzt gezeigten Videos und aus deinem Verlauf. Autoplay spielt immer das nächste Video ab.
 
-## Installation auf dem Handy (Android + Termux)
+## Alternative: Installation in Termux
 
 1. **Termux** aus F-Droid installieren (die Play-Store-Version ist veraltet).
 2. In Termux:
@@ -91,3 +105,30 @@ Aufbau:
   - `pages/`: die einzelnen Seiten
 
 Sicherheit: Der Server lauscht standardmäßig nur auf `127.0.0.1`. Er prüft den Host-Header (Schutz vor DNS-Rebinding), verlangt für schreibende Anfragen einen eigenen Header (CSRF-Schutz) und leitet über den Proxy nur YouTube-Videoserver weiter.
+
+## Android-App selbst bauen
+
+```bash
+npm ci
+node scripts/prepare-android.mjs   # lädt Node.js für Android (nodejs-mobile) und packt den Server
+cd android && ./gradlew assembleRelease
+```
+
+Benötigt JDK 17 und das Android SDK mit NDK 27. Für Updates ohne Neuinstallation sollte jede Version mit demselben Schlüssel signiert sein. Lege dafür in GitHub unter *Settings → Secrets → Actions* `VL_KEYSTORE_BASE64`, `VL_KEYSTORE_PASSWORD`, `VL_KEY_ALIAS` und `VL_KEY_PASSWORD` an. Ohne diese Secrets nutzt der Build einen Schlüssel, der im Cache von GitHub Actions liegt. Er bleibt erhalten, solange regelmäßig gebaut wird.
+
+## Rechtliches
+
+**Kein Rechtsrat.** Eine Garantie, nie verklagt oder abgemahnt zu werden, kann niemand geben. Das Projekt folgt aber dem Muster, mit dem vergleichbare Open-Source-Apps wie NewPipe seit Jahren existieren:
+
+- **Kein zentraler Server:** Jede Person führt die App auf dem eigenen Gerät aus. Der Projektbetreiber hostet, speichert und verbreitet keine Videos und leitet keinen Datenverkehr fremder Nutzer weiter.
+- **Keine Marken von Google:** eigener Name, eigenes Logo. „YouTube“ wird nur genannt, um die Kompatibilität zu beschreiben. Der Hinweis „nicht verbunden mit YouTube/Google“ steht in App, README und LICENSE.
+- **Kein Code von YouTube:** Es wird keine veränderte YouTube-App verteilt. Genau das hat 2022 zum Aus von „YouTube Vanced“ geführt.
+- **Kein Geld, keine Datensammlung:** keine Werbung, kein Tracking, keine Konten auf einem Projektserver. Die Anmeldung erfolgt direkt bei Google.
+- **Open Source** unter MIT-Lizenz mit Haftungsausschluss. Fremdlizenzen stehen in `THIRD_PARTY_NOTICES.md`.
+
+Wichtig für dich als Betreiber:
+- Betreibe **keine öffentliche Instanz** im Internet, bei der fremde Leute über deinen Server schauen. Betreiber öffentlicher Invidious-Instanzen haben 2023 Post von YouTubes Rechtsabteilung bekommen. Der Modus `--lan` ist nur für das eigene Heimnetz gedacht.
+- Werbe nicht mit „YouTube“ im Namen und nutze kein YouTube-Logo.
+- Veröffentliche die App nicht im Google Play Store. Google entfernt dort solche Apps; die Verbreitung über GitHub oder F-Droid ist üblich.
+- Werbefreies Abspielen und Herunterladen widerspricht den Nutzungsbedingungen von YouTube. Das betrifft in erster Linie die einzelnen Nutzer (Risiko etwa: Sperrung des Kontos). Herunterladen nur für den privaten Gebrauch und nur, wo das Urheberrecht es erlaubt.
+- Wenn du das Projekt groß verbreiten oder damit Geld verdienen willst, lass dich vorher von einer Anwältin oder einem Anwalt für IT- und Urheberrecht beraten.

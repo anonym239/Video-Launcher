@@ -34,7 +34,7 @@ route('/settings', () => import('./pages/settings.js'), { name: 'settings' });
 route('/([A-Za-z0-9_-]{11})', () => import('./pages/resolve.js'), { name: 'resolve' }); // youtu.be-Links
 
 // ---- Kopfleiste ------------------------------------------------------------------------
-const LOGO = `<svg class="logo-svg" viewBox="0 0 28 20" aria-hidden="true"><rect width="28" height="20" rx="5.5" fill="#FF0033"/><path d="M11.2 5.6v8.8L18.6 10z" fill="#fff"/></svg>`;
+const LOGO = `<svg class="logo-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#7C4DFF"/><path d="M12 1a11 11 0 0 1 11 11h-3.6A7.4 7.4 0 0 0 12 4.6z" fill="#00E5FF"/><path d="M9.4 7.2v9.6L17 12z" fill="#fff"/></svg>`;
 
 function buildMasthead() {
   $('#guide-btn').innerHTML = icon('menu');
@@ -501,6 +501,21 @@ export const mini = {
   }
 };
 
+// ---- Hinweis beim ersten Start ----------------------------------------------------------
+function showFirstRunNotice() {
+  if (localStorage.getItem('vl:noticeAccepted') === '1') return;
+  openDialog({
+    title: 'Willkommen bei Video Launcher',
+    body: html`<div class="notice">
+      <p>Video Launcher ist ein <b>unabhängiges Open-Source-Projekt</b>. Es ist nicht mit YouTube oder Google verbunden und wird von ihnen weder unterstützt noch geprüft.</p>
+      <p>Die App läuft nur auf deinem Gerät: Inhalte werden direkt von den öffentlichen Servern abgerufen. Es gibt keinen zentralen Server, und die App speichert oder verbreitet keine Videos anderer.</p>
+      <p>Bitte beachte die Rechte der Urheber und nutze die App nur privat und auf eigene Verantwortung.</p>
+    </div>`,
+    actions: [{ label: 'Verstanden', primary: true, run: () => localStorage.setItem('vl:noticeAccepted', '1') }],
+    className: 'notice-dialog'
+  });
+}
+
 // ---- Start ----------------------------------------------------------------------------------
 async function boot() {
   buildMasthead();
@@ -551,6 +566,7 @@ async function boot() {
   } catch (e) {
     toast(e.message);
   }
+  showFirstRunNotice();
   renderAccountButton();
   setInterval(() => signedIn() && refreshNotifCount(), 5 * 60 * 1000);
   startRouter();

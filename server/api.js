@@ -7,6 +7,7 @@ import {
 } from './normalize.js';
 import { streamsFor, dashManifest, invalidate } from './stream.js';
 import { localSubscriptionFeed } from './rss.js';
+import { EndlessFeed, shuffle } from './endless.js';
 
 // ---- Fortsetzungen (Endlos-Scrollen) ----------------------------------------
 const conts = new Map();
@@ -26,6 +27,48 @@ function loadCont(key, kind) {
     throw httpError(410, 'Die Liste ist abgelaufen. Bitte Seite neu laden.');
   }
   return c.obj;
+}
+
+function loadEntry(key) {
+  const c = conts.get(key);
+  if (!c || Date.now() - c.at > CONT_TTL) throw httpError(410, 'Die Liste ist abgelaufen. Bitte Seite neu laden.');
+  c.at = Date.now();
+  return c;
+}
+
+// Endlos weiter: Ist eine YouTube-Liste zu Ende, übernimmt der Endlos-Feed.
+function endlessCont(items, extraSeeds = []) {
+  const ids = items.filter((i) => i.type === 'video').map((i) => i.id);
+  const seeds = shuffle([...ids, ...extraSeeds]).slice(0, 40);
+  if (!seeds.length) seeds.push(...store.history.slice(0, 10).map((v) => v.id));
+  return saveCont(new EndlessFeed(getYT, seeds, ids), 'endless');
+}
+
+// Lädt die nächste Seite einer beliebigen Startseiten-/Ähnliche-Videos-Liste.
+async function nextPage(key) {
+  const entry = loadEntry(key);
+  const obj = entry.obj;
+  let items;
+  let next = null;
+  switch (entry.kind) {
+    case 'endless':
+      items = await obj.next();
+      return { items, cont: key };
+    case 'search':
+      next = await obj.getContinuation();
+      items = collectItems(next.results);
+      return { items, cont: hasCont(next) ? saveCont(next, 'search') : endlessCont(items) };
+    case 'related':
+      next = await obj.getWatchNextContinuation();
+      items = collectItems(next.watch_next_feed);
+      return { items, cont: next.wn_has_continuation ? saveCont(next, 'related') : endlessCont(items) };
+    case 'home':
+      next = await obj.getContinuation();
+      items = itemsFromFeed(next);
+      return { items, cont: hasCont(next) ? saveCont(next, 'home') : endlessCont(items, store.history.slice(0, 10).map((v) => v.id)) };
+    default:
+      throw httpError(400, 'Unbekannte Liste');
+  }
 }
 
 export function httpError(status, message) {
@@ -68,16 +111,14 @@ export const routes = {
   'GET /api/status': async () => ({ auth: publicAuth(), settings: store.settings }),
 
   'GET /api/home': async (q) => {
-    if (q.get('cont')) {
-      const feed = loadCont(q.get('cont'), 'home');
-      return feedResult(await feed.getContinuation(), 'home');
-    }
+    if (q.get('cont')) return nextPage(q.get('cont'));
     const yt = await getYT();
+    const historySeeds = store.history.slice(0, 10).map((v) => v.id);
     let feed;
     try {
       feed = await yt.getHomeFeed();
     } catch (e) {
-      // Ohne Anmeldung/Verlauf liefert YouTube manchmal keine Startseite – dann Trends anzeigen.
+      // Ohne Anmeldung/Verlauf liefert YouTube manchmal keine Startseite.
       feed = null;
     }
     let chips = feed ? FILTER_NAMES(feed) : [];
@@ -85,13 +126,24 @@ export const routes = {
     if (feed && chip && chip !== chips[0]) {
       feed = await feed.getFilteredFeed(chip);
     }
-    let res = feed ? feedResult(feed, 'home') : { items: [], cont: null };
-    if (!res.items.length) {
-      const search = await yt.search(store.settings.region === 'DE' ? 'Trends Deutschland' : 'trending', { type: 'video', upload_date: 'week' });
-      res = { items: collectItems(search.results), cont: hasCont(search) ? saveCont(search, 'search') : null, contKind: 'search' };
+    let items = feed ? itemsFromFeed(feed) : [];
+    let cont = items.length && hasCont(feed) ? saveCont(feed, 'home') : null;
+    if (!items.length) {
       chips = [];
+      if (historySeeds.length) {
+        // Eigene Empfehlungen aus dem Verlauf (wie "Für dich").
+        const endless = new EndlessFeed(getYT, shuffle(historySeeds));
+        items = await endless.next();
+        cont = saveCont(endless, 'endless');
+      }
+      if (!items.length) {
+        const search = await yt.search(store.settings.region === 'DE' ? 'Trends Deutschland' : 'trending', { type: 'video', upload_date: 'week' });
+        items = collectItems(search.results);
+        cont = hasCont(search) ? saveCont(search, 'search') : null;
+      }
     }
-    return { ...res, chips };
+    if (!cont) cont = endlessCont(items, historySeeds);
+    return { items, cont, chips };
   },
 
   'GET /api/search': async (q) => {
@@ -158,11 +210,7 @@ export const routes = {
     return watchData(info, id);
   },
 
-  'GET /api/related': async (q) => {
-    const info = loadCont(q.get('cont'), 'related');
-    const next = await info.getWatchNextContinuation();
-    return { items: collectItems(next.watch_next_feed), cont: next.wn_has_continuation ? saveCont(next, 'related') : null };
-  },
+  'GET /api/related': async (q) => nextPage(q.get('cont')),
 
   'GET /api/streams/:id': async (q, { id }) => {
     checkId(id);
@@ -955,7 +1003,7 @@ async function watchData(info, id) {
     heat,
     playlist,
     related,
-    relatedCont: info.wn_has_continuation ? saveCont(info, 'related') : null,
+    relatedCont: info.wn_has_continuation ? saveCont(info, 'related') : endlessCont(related, [id]),
     commentCount,
     thumbnail: videoThumb(id, 'maxresdefault'),
     position: store.getPosition(id),
