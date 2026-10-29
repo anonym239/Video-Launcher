@@ -134,7 +134,7 @@ public class MainActivity extends Activity {
                 customView = view;
                 customViewCallback = callback;
                 root.addView(view, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-                setImmersive(true);
+                setFullscreenUi(true);
                 setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
             }
 
@@ -145,7 +145,7 @@ public class MainActivity extends Activity {
                 customView = null;
                 if (customViewCallback != null) customViewCallback.onCustomViewHidden();
                 customViewCallback = null;
-                setImmersive(false);
+                setFullscreenUi(false);
                 setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
             }
         });
@@ -244,7 +244,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void setImmersive(boolean on) {
+    private void setFullscreenUi(boolean on) {
         View decor = getWindow().getDecorView();
         if (on) {
             decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION

@@ -566,10 +566,11 @@ async function boot() {
   } catch (e) {
     toast(e.message);
   }
-  showFirstRunNotice();
   renderAccountButton();
   setInterval(() => signedIn() && refreshNotifCount(), 5 * 60 * 1000);
   startRouter();
+  // Erst nach dem ersten Rendern zeigen, sonst schließt die Navigation den Dialog sofort.
+  showFirstRunNotice();
 }
 
 boot();
