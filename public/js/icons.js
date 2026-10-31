@@ -167,7 +167,7 @@ const SVG = 'viewBox="0 0 24 24" aria-hidden="true" focusable="false"';
 
 export function icon(name, cls = '') {
   if (S[name]) {
-    return `<svg class="icon ic-line ${cls}" ${SVG} fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${S[name]}</svg>`;
+    return `<svg class="icon ic-line ${cls}" ${SVG} fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${S[name]}</svg>`;
   }
   if (F[name]) {
     return `<svg class="icon ic-fill ${cls}" ${SVG} fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${F[name]}</svg>`;

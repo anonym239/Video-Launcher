@@ -127,7 +127,25 @@ export class ApiError extends Error {
   }
 }
 
+// Vorab gestartete Anfragen (z. B. beim Antippen eines Videos), die api() wiederverwendet.
+const prefetched = new Map(); // path -> { at, promise }
+export function prefetch(path) {
+  const hit = prefetched.get(path);
+  if (hit && Date.now() - hit.at < 60000) return;
+  const promise = api(path).catch(() => null);
+  prefetched.set(path, { at: Date.now(), promise });
+  if (prefetched.size > 40) prefetched.delete(prefetched.keys().next().value);
+}
+
 export async function api(path, { method = 'GET', body, signal } = {}) {
+  if (method === 'GET' && prefetched.has(path)) {
+    const hit = prefetched.get(path);
+    prefetched.delete(path);
+    if (Date.now() - hit.at < 60000) {
+      const data = await hit.promise;
+      if (data) return data;
+    }
+  }
   const opts = { method, signal, headers: {} };
   if (method !== 'GET') {
     opts.headers['x-vl'] = '1';

@@ -329,3 +329,94 @@ export function invalidate(id) {
   if (id) cache.delete(id);
   else cache.clear();
 }
+
+// ---- Downloads bis 4K/8K ---------------------------------------------------------
+// Hohe Qualitäten gibt es bei YouTube nur als getrennte Video- und Audiospur (MP4/DASH).
+// Diese werden beim Herunterladen zu einer MP4-Datei zusammengefügt (server/mux.js).
+function heightLabel(h, fps) {
+  const tag = h >= 4320 ? ' (8K)' : h >= 2160 ? ' (4K)' : h >= 1440 ? ' (QHD)' : h >= 720 ? ' (HD)' : '';
+  return `${h}p${fps > 30 ? fps : ''}${tag}`;
+}
+
+export async function downloadOptions(id) {
+  const r = await resolveVideo(id);
+  const options = [];
+  if (r.source === 'youtubei') {
+    const formats = r.info.streaming_data?.adaptive_formats || [];
+    const audio = formats
+      .filter((f) => f.has_audio && !f.has_video && /mp4/.test(f.mime_type) && !f.is_drc)
+      .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+    // Pro Auflösung eine Variante: H.264 bevorzugt (läuft überall), sonst AV1.
+    const byHeight = new Map();
+    for (const f of formats) {
+      if (!f.has_video || f.has_audio || !/^video\/mp4/.test(f.mime_type) || !f.height) continue;
+      const codec = /av01/.test(f.mime_type) ? 'av01' : /avc1/.test(f.mime_type) ? 'avc1' : null;
+      if (!codec) continue;
+      const cur = byHeight.get(f.height);
+      const better = !cur || (cur.codec === 'av01' && codec === 'avc1') || (cur.codec === codec && (f.fps || 0) > (cur.f.fps || 0));
+      if (better) byHeight.set(f.height, { f, codec });
+    }
+    if (audio) {
+      for (const [h, { f, codec }] of [...byHeight.entries()].sort((a, b) => b[0] - a[0])) {
+        const size = Number(f.content_length || 0) + Number(audio.content_length || 0);
+        options.push({
+          kind: 'video',
+          label: heightLabel(h, f.fps),
+          sub: `MP4 · ${codec === 'av01' ? 'AV1' : 'H.264'}${size ? ` · ${formatSize(size)}` : ''}`,
+          url: `/dl/${id}?v=${f.itag}&a=${audio.itag}`
+        });
+      }
+      options.push({ kind: 'audio', label: `Nur Audio (${Math.round((audio.bitrate || 0) / 1000)} kbit/s)`, sub: `M4A${audio.content_length ? ` · ${formatSize(audio.content_length)}` : ''}`, url: `/dl/${id}?a=${audio.itag}` });
+    }
+  }
+  if (!options.length) {
+    const s = await streamsFor(id);
+    for (const p of s.progressive) options.push({ kind: 'video', label: p.label, sub: p.mime.split(';')[0], url: p.url, direct: true });
+    for (const a of s.audio) options.push({ kind: 'audio', label: `Nur Audio ${a.label}`, sub: 'audio/mp4', url: a.url, direct: true });
+  }
+  return { title: r.info?.basic_info?.title || r.data?.title || id, options };
+}
+
+function formatSize(bytes) {
+  bytes = Number(bytes);
+  if (bytes > 1e9) return `${(bytes / 1e9).toFixed(1).replace('.', ',')} GB`;
+  return `${Math.max(1, Math.round(bytes / 1e6))} MB`;
+}
+
+// /dl/ID?v=itag&a=itag – liefert die fertige Datei (Video+Audio zusammengefügt oder nur Audio).
+export async function download(req, res, id, query) {
+  const { muxMp4, fetchChunks } = await import('./mux.js');
+  const r = await resolveVideo(id);
+  if (r.source !== 'youtubei') throw Object.assign(new Error('Für dieses Video ist nur der einfache Download verfügbar.'), { status: 400 });
+  const yt = await getYT();
+  const formats = r.info.streaming_data?.adaptive_formats || [];
+  const find = (itag) => formats.find((f) => String(f.itag) === String(itag));
+  const vf = query.get('v') ? find(query.get('v')) : null;
+  const af = find(query.get('a'));
+  if (!af || (query.get('v') && !vf)) throw Object.assign(new Error('Format nicht gefunden'), { status: 404 });
+
+  const title = (r.info.basic_info?.title || id).replace(/[\\/:*?"<>|\n\r]+/g, '_').slice(0, 120);
+  const name = vf ? `${title} (${vf.height}p).mp4` : `${title}.m4a`;
+  const ctl = new AbortController();
+  req.on('close', () => ctl.abort());
+  const open = async (f) => {
+    const url = await f.decipher(yt.session.player);
+    return fetchChunks(url, { headers: upstreamHeaders(url), total: Number(f.content_length) || 0, signal: ctl.signal });
+  };
+  res.writeHead(200, {
+    'content-type': vf ? 'video/mp4' : 'audio/mp4',
+    'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+    'cache-control': 'no-store',
+    ...(!vf && af.content_length ? { 'content-length': String(af.content_length) } : {})
+  });
+  try {
+    const source = vf ? muxMp4(await open(vf), await open(af)) : await open(af);
+    for await (const chunk of source) {
+      if (!res.write(chunk)) await new Promise((ok) => res.once('drain', ok));
+    }
+    res.end();
+  } catch (e) {
+    if (!ctl.signal.aborted) console.error('[download]', e.message);
+    res.destroy();
+  }
+}

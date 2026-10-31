@@ -150,7 +150,7 @@ export function startRouter() {
     const a = e.target.closest('a[href]');
     if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
     const href = a.getAttribute('href');
-    if (!href || !href.startsWith('/') || href.startsWith('//') || href.startsWith('/api/') || href.startsWith('/vp')) return;
+    if (!href || !href.startsWith('/') || href.startsWith('//') || href.startsWith('/api/') || href.startsWith('/vp') || href.startsWith('/dl/')) return;
     e.preventDefault();
     go(href);
   });

@@ -1,7 +1,7 @@
 // Einstiegspunkt: baut die App-Hülle (Kopfleiste, Navigation, Miniplayer) und startet das Routing.
 import { route, startRouter, go, clearKeepAlive, render } from './router.js';
 import { state, on, loadStatus, setAuth, signedIn, saveSettings } from './state.js';
-import { api, html, raw, el, esc, debounce, $ } from './util.js';
+import { api, html, raw, el, esc, debounce, $, prefetch } from './util.js';
 import { icon } from './icons.js';
 import { openMenu, openDialog, closeOverlay, toast, avatar, isMobile } from './components.js';
 import { player } from './player.js';
@@ -553,6 +553,21 @@ async function boot() {
   on('player:mini', () => {
     if (document.body.dataset.page === 'watch') go('/');
   });
+
+  // Schon beim Berühren eines Videos Infos und Streams laden – spart beim Öffnen Zeit.
+  document.addEventListener('pointerdown', (e) => {
+    const a = e.target.closest?.('a[href]');
+    if (!a) return;
+    const href = a.getAttribute('href') || '';
+    const watch = href.match(/^\/watch\?v=([\w-]{11})(?:&|$)/);
+    const short = href.match(/^\/shorts\/([\w-]{11})/);
+    if (watch) {
+      if (!href.includes('list=')) prefetch(`/api/video/${watch[1]}`);
+      prefetch(`/api/streams/${watch[1]}`);
+    } else if (short) {
+      prefetch(`/api/streams/${short[1]}`);
+    }
+  }, { passive: true, capture: true });
 
   // Globale Tastenkürzel: "/" fokussiert die Suche.
   document.addEventListener('keydown', (e) => {

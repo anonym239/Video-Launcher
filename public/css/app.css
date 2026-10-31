@@ -1107,7 +1107,8 @@ select option { background: var(--bg-menu); color: var(--text); }
   .short-frame { width: 100%; height: 100%; max-width: none; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
   .short-top { padding: calc(10px + env(safe-area-inset-top)) 12px 10px; }
   .short-actions { position: absolute; right: 6px; bottom: 26px; z-index: 3; gap: 12px; color: #fff; padding: 0; }
-  .sa-icon { width: 46px; height: 46px; background: rgba(0, 0, 0, 0.26); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+  .sa-icon { width: 46px; height: 46px; background: transparent; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.55)); }
+  .sa-icon .icon { width: 30px; height: 30px; }
   .short-act span:not(.sa-icon) { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
   .short-act.on .sa-icon { background: rgba(255, 255, 255, 0.95); color: #0f0f0f; }
   .short-bottom { padding-right: 76px; }
@@ -1327,3 +1328,8 @@ body.android-pip .player .p-video { width: 100vw !important; height: 100vh !impo
   .s-shelf .short-thumb { border-radius: 12px; }
   .dialog { border-radius: 24px 24px 0 0; }
 }
+.dl-row span { display: flex; flex-direction: column; gap: 2px; }
+.dl-row b { font-weight: 600; }
+.dl-hint { padding: 8px 16px 0; }
+@keyframes sa-pop { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
+.short-act.pop .sa-icon { animation: sa-pop 0.3s ease-out; }

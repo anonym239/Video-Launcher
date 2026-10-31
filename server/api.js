@@ -6,10 +6,11 @@ import { store } from './store.js';
 import {
   collectItems, itemsFromFeed, itemsFromTvRaw, normalizeComment, textToHtml, thumb, txt, escapeHtml, videoThumb, formatDuration, unwrap
 } from './normalize.js';
-import { streamsFor, dashManifest, invalidate } from './stream.js';
+import { streamsFor, dashManifest, invalidate, resolveVideo, downloadOptions } from './stream.js';
 import { localSubscriptionFeed } from './rss.js';
 import { EndlessFeed, shuffle } from './endless.js';
-import { forYou } from './recommend.js';
+import { forYou, interleave, cleanup } from './recommend.js';
+import { ShortsFeed } from './shorts.js';
 
 // ---- Fortsetzungen (Endlos-Scrollen) ----------------------------------------
 const conts = new Map();
@@ -122,54 +123,7 @@ export const routes = {
 
   'GET /api/home': async (q) => {
     if (q.get('cont')) return nextPage(q.get('cont'));
-    const yt = await getYT();
-    const historySeeds = store.history.slice(0, 10).map((v) => v.id);
-    let feed;
-    try {
-      feed = await yt.getHomeFeed();
-    } catch (e) {
-      // Ohne Anmeldung/Verlauf liefert YouTube manchmal keine Startseite.
-      feed = null;
-    }
-    let chips = feed ? FILTER_NAMES(feed) : [];
-    const chip = q.get('chip');
-    if (feed && chip && chip !== chips[0]) {
-      feed = await feed.getFilteredFeed(chip);
-    }
-    let items = feed ? itemsFromFeed(feed) : [];
-    let cont = items.length && hasCont(feed) ? saveCont(feed, 'home') : null;
-    // Angemeldet, aber die Web-Startseite ist leer (TV-Anmeldung) → TV-Startseite.
-    if (isSignedIn() && !items.length) {
-      for (const id of ['FEwhat_to_watch', 'default']) {
-        items = await tvBrowse(id).catch(() => []);
-        if (items.length) break;
-      }
-      if (items.length) cont = endlessCont(items, historySeeds);
-    }
-    // Ohne Konto ist YouTubes Startseite allgemein. Dann eigene Empfehlungen
-    // "Für dich" aus Verlauf und Abos (mit Chip-Filter bleibt YouTubes Ergebnis).
-    if (!isSignedIn() && !(chip && chip !== chips[0])) {
-      const shelves = items.filter((i) => i.type === 'shelf');
-      const mix = await forYou(yt, {
-        history: store.history,
-        subsFeed: async () => (await localSubscriptionFeed(store.subscriptions)).items,
-        homeItems: items
-      });
-      if (mix.items.length) {
-        // Shorts-Regal von YouTube an dritter Stelle behalten (wie in der App).
-        items = [...mix.items.slice(0, 6), ...shelves.slice(0, 1), ...mix.items.slice(6)];
-        const endless = new EndlessFeed(getYT, shuffle(mix.seeds), mix.items.map((v) => v.id).concat(store.history.map((v) => v.id)));
-        cont = saveCont(endless, 'endless');
-      }
-    }
-    if (!items.length) {
-      chips = [];
-      const search = await yt.search(store.settings.region === 'DE' ? 'Trends Deutschland' : 'trending', { type: 'video', upload_date: 'week' });
-      items = collectItems(search.results);
-      cont = hasCont(search) ? saveCont(search, 'search') : null;
-    }
-    if (!cont) cont = endlessCont(items, historySeeds);
-    return { items, cont, chips };
+    return cachedHome(q.get('chip') || '', q.get('fresh') === '1');
   },
 
   'GET /api/search': async (q) => {
@@ -224,16 +178,9 @@ export const routes = {
 
   'GET /api/video/:id': async (q, { id }) => {
     checkId(id);
-    const yt = await getYT();
-    const list = q.get('list');
-    let info;
-    if (list) {
-      const ep = new YTNodes.NavigationEndpoint({ watchEndpoint: { videoId: id, playlistId: list, index: Number(q.get('index') || 0) } });
-      info = await yt.getInfo(ep);
-    } else {
-      info = await yt.getInfo(id);
-    }
-    return watchData(info, id);
+    const data = await cachedVideo(id, q.get('list'), q.get('index'));
+    // Position und Abo-Status können sich seit dem Zwischenspeichern geändert haben.
+    return { ...data, position: store.getPosition(id), subscribed: isSignedIn() ? data.subscribed : store.isSubscribed(data.channel.id) };
   },
 
   'GET /api/related': async (q) => nextPage(q.get('cont')),
@@ -243,6 +190,8 @@ export const routes = {
     if (q.get('fresh')) invalidate(id);
     return streamsFor(id);
   },
+
+  'GET /api/download/:id': async (q, { id }) => downloadOptions(checkId(id)),
 
   'GET /api/manifest/:file': async (q, { file }) => {
     const id = checkId(String(file).replace(/\.mpd$/, ''));
@@ -383,55 +332,32 @@ export const routes = {
   },
 
   'GET /api/shorts': async (q) => {
-    const yt = await getYT();
-    if (q.get('cont')) {
-      const info = loadCont(q.get('cont'), 'shorts');
-      const next = await info.getWatchNextContinuation();
-      return { ids: shortIds(next), cont: next.wn_has_continuation ? saveCont(next, 'shorts') : null };
+    const hint = q.get('seed');
+    let key = q.get('cont');
+    let feed;
+    if (key) {
+      feed = loadCont(key, 'shorts');
+    } else {
+      feed = new ShortsFeed(getYT, {
+        history: store.history,
+        liked: store.listOf('liked'),
+        signedIn: isSignedIn(),
+        subsShorts: async () => (await localSubscriptionFeed(store.subscriptions, { shorts: true })).items.map((v) => v.id)
+      });
+      key = saveCont(feed, 'shorts');
     }
-    let seed = q.get('seed');
-    let ids = [];
-    if (!seed) {
-      ids = await shortsSeeds(yt);
-      seed = ids[0];
-    }
-    if (!seed) return { ids: [], cont: null };
-    checkId(seed);
-    try {
-      const info = await yt.getShortsVideoInfo(seed);
-      const next = shortIds(info);
-      const all = [seed, ...ids.slice(1), ...next].filter((v, i, a) => a.indexOf(v) === i);
-      return { ids: all, cont: info.wn_has_continuation ? saveCont(info, 'shorts') : null };
-    } catch {
-      return { ids: [seed, ...ids.slice(1)].filter((v, i, a) => a.indexOf(v) === i), cont: null };
-    }
+    let ids = await feed.next(hint);
+    // Direkt geöffneter Short (/shorts/ID) kommt zuerst.
+    if (!q.get('cont') && hint) ids = [hint, ...ids.filter((i) => i !== hint)];
+    prefetchShorts(ids.slice(0, 3));
+    return { ids, cont: key };
   },
 
   'GET /api/short/:id': async (q, { id }) => {
     checkId(id);
-    const yt = await getYT();
-    const info = await yt.getShortsVideoInfo(id);
-    const b = info.basic_info || {};
-    const header = findNode(info.player_overlays, 'ReelPlayerHeader');
-    const overlay = info.player_overlays || {};
-    let avatar = thumb(header?.channel_thumbnail, 88);
-    let commentCount = '';
-    const commentsBtn = findNode(overlay, 'ButtonView', (n) => /comment|kommentar/i.test(n.accessibility_text || n.icon_name || ''));
-    if (commentsBtn) commentCount = commentsBtn.title || '';
-    const sub = await subscribedState(b.channel_id, info);
-    return {
-      id,
-      title: b.title || txt(header?.reel_title_text) || '',
-      channel: { id: b.channel_id || '', name: b.author || txt(header?.channel_title_text) || '', avatar },
-      likes: b.like_count ?? null,
-      liked: !!b.is_liked || store.listOf('liked').some((v) => v.id === id),
-      disliked: !!b.is_disliked,
-      views: b.view_count ?? null,
-      comments: commentCount,
-      subscribed: sub,
-      thumbnail: videoThumb(id, 'oar2')
-    };
+    return shortMeta(id);
   },
+
 
   'GET /api/hashtag/:tag': async (q, { tag }) => {
     if (q.get('cont')) {
@@ -812,6 +738,146 @@ async function playlistFallback(id, err) {
   };
 }
 
+// ---- Startseite (zwischengespeichert, parallel berechnet) -----------------------------
+const HOME_TTL = 3 * 60 * 1000;
+const homeCache = new Map(); // chip -> { at, promise }
+
+function cachedHome(chip, fresh) {
+  const key = `${isSignedIn() ? 'a' : 'l'}:${chip}`;
+  const hit = homeCache.get(key);
+  if (!fresh && hit && Date.now() - hit.at < HOME_TTL) return hit.promise;
+  const promise = computeHome(chip).catch((e) => {
+    homeCache.delete(key);
+    throw e;
+  });
+  homeCache.set(key, { at: Date.now(), promise });
+  return promise;
+}
+
+// Beim Start schon vorbereiten, damit die App sofort Inhalte zeigt.
+export function warmHome() {
+  cachedHome('', false).catch(() => {});
+}
+
+async function computeHome(chip) {
+  const yt = await getYT();
+  const historySeeds = store.history.slice(0, 10).map((v) => v.id);
+  const personal = !isSignedIn() && !chip;
+  // Eigene Empfehlungen und YouTubes Startseite gleichzeitig laden.
+  const mixPromise = personal
+    ? forYou(yt, { history: store.history, subsFeed: async () => (await localSubscriptionFeed(store.subscriptions)).items })
+    : null;
+  let feed = null;
+  try {
+    feed = await yt.getHomeFeed();
+  } catch {}
+  let chips = feed ? FILTER_NAMES(feed) : [];
+  if (feed && chip && chip !== chips[0]) feed = await feed.getFilteredFeed(chip);
+  let items = feed ? itemsFromFeed(feed) : [];
+  let cont = items.length && hasCont(feed) ? saveCont(feed, 'home') : null;
+  // Angemeldet, aber die Web-Startseite ist leer (TV-Anmeldung) → TV-Startseite.
+  if (isSignedIn() && !items.length) {
+    for (const id of ['FEwhat_to_watch', 'default']) {
+      items = await tvBrowse(id).catch(() => []);
+      if (items.length) break;
+    }
+    if (items.length) cont = endlessCont(items, historySeeds);
+  }
+  // Ohne Konto: "Für dich" aus Verlauf und Abos, YouTubes Startseite als Ergänzung.
+  if (mixPromise) {
+    const mix = await mixPromise.catch(() => ({ items: [], seeds: [] }));
+    const shelves = items.filter((i) => i.type === 'shelf');
+    const watched = new Set(store.history.map((v) => v.id));
+    const merged = cleanup(interleave([mix.items, mix.items.slice(1), items.filter((i) => i.type === 'video')]), watched);
+    if (merged.length) {
+      // Shorts-Regal von YouTube an siebter Stelle (wie in der App).
+      items = [...merged.slice(0, 6), ...shelves.slice(0, 1), ...merged.slice(6)];
+      const endless = new EndlessFeed(getYT, shuffle([...mix.seeds, ...historySeeds]), merged.map((v) => v.id).concat([...watched]));
+      cont = saveCont(endless, 'endless');
+    }
+  }
+  if (!items.length) {
+    chips = [];
+    const search = await yt.search(store.settings.region === 'DE' ? 'Trends Deutschland' : 'trending', { type: 'video', upload_date: 'week' });
+    items = collectItems(search.results);
+    cont = hasCont(search) ? saveCont(search, 'search') : null;
+  }
+  if (!cont) cont = endlessCont(items, historySeeds);
+  return { items, cont, chips };
+}
+
+// ---- Wiedergabeseite (Infos 5 Minuten zwischengespeichert) -----------------------------
+const videoCache = new Map(); // key -> { at, promise }
+function cachedVideo(id, list, index) {
+  const key = `${id}|${list || ''}|${index || ''}|${isSignedIn() ? 'a' : 'l'}`;
+  const hit = videoCache.get(key);
+  if (hit && Date.now() - hit.at < 5 * 60 * 1000) return hit.promise;
+  const promise = (async () => {
+    const yt = await getYT();
+    let info;
+    if (list) {
+      const ep = new YTNodes.NavigationEndpoint({ watchEndpoint: { videoId: id, playlistId: list, index: Number(index || 0) } });
+      info = await yt.getInfo(ep);
+    } else {
+      info = await yt.getInfo(id);
+    }
+    return watchData(info, id);
+  })().catch((e) => {
+    videoCache.delete(key);
+    throw e;
+  });
+  videoCache.set(key, { at: Date.now(), promise });
+  if (videoCache.size > 100) videoCache.delete(videoCache.keys().next().value);
+  return promise;
+}
+
+// ---- Shorts: Zwischenspeicher & Vorladen ---------------------------------------------
+const shortMetaCache = new Map(); // id -> Promise
+function shortMeta(id) {
+  const hit = shortMetaCache.get(id);
+  if (hit && Date.now() - hit.at < 10 * 60 * 1000) return hit.promise;
+  const promise = loadShortMeta(id).catch((e) => {
+    shortMetaCache.delete(id);
+    throw e;
+  });
+  shortMetaCache.set(id, { at: Date.now(), promise });
+  if (shortMetaCache.size > 300) shortMetaCache.delete(shortMetaCache.keys().next().value);
+  return promise;
+}
+
+// Lädt Infos und Stream-Adressen der nächsten Shorts schon im Hintergrund.
+function prefetchShorts(ids) {
+  for (const id of ids) {
+    shortMeta(id).catch(() => {});
+    resolveVideo(id).catch(() => {});
+  }
+}
+
+async function loadShortMeta(id) {
+  const yt = await getYT();
+  const info = await yt.getShortsVideoInfo(id);
+  const b = info.basic_info || {};
+  const header = findNode(info.player_overlays, 'ReelPlayerHeader');
+  const overlay = info.player_overlays || {};
+  let avatar = thumb(header?.channel_thumbnail, 88);
+  let commentCount = '';
+  const commentsBtn = findNode(overlay, 'ButtonView', (n) => /comment|kommentar/i.test(n.accessibility_text || n.icon_name || ''));
+  if (commentsBtn) commentCount = commentsBtn.title || '';
+  const sub = await subscribedState(b.channel_id, info);
+  return {
+    id,
+    title: b.title || txt(header?.reel_title_text) || '',
+    channel: { id: b.channel_id || '', name: b.author || txt(header?.channel_title_text) || '', avatar },
+    likes: b.like_count ?? null,
+    liked: !!b.is_liked || store.listOf('liked').some((v) => v.id === id),
+    disliked: !!b.is_disliked,
+    views: b.view_count ?? null,
+    comments: commentCount,
+    subscribed: sub,
+    thumbnail: videoThumb(id, 'oar2')
+  };
+}
+
 // ---- Hilfsfunktionen ----------------------------------------------------------
 function publicAuth() {
   return {
@@ -869,23 +935,7 @@ function historyResult(h) {
   return { sections, items, cont: hasCont(h) ? saveCont(h, 'history') : null };
 }
 
-function shortIds(info) {
-  return (info.watch_next_feed || []).map((ep) => ep?.payload?.videoId).filter((v) => v && /^[\w-]{11}$/.test(v));
-}
 
-async function shortsSeeds(yt) {
-  try {
-    const home = await yt.getHomeFeed();
-    const ids = itemsFromFeed(home, { flatten: true }).filter((i) => i.type === 'short').map((i) => i.id);
-    if (ids.length) return ids;
-  } catch {}
-  try {
-    const s = await yt.search('shorts', { type: 'shorts' });
-    return collectItems(s.results, { flatten: true }).filter((i) => i.type === 'short' || i.type === 'video').map((i) => i.id);
-  } catch {
-    return [];
-  }
-}
 
 async function resolveHandle(handle) {
   const yt = await getYT();

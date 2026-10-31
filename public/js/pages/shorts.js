@@ -32,8 +32,8 @@ export default async function shorts({ node, params, signal }) {
     loading = true;
     try {
       let data;
-      if (cont) data = await api('/api/shorts' + qs({ cont }), { signal });
-      else data = await api('/api/shorts' + qs({ seed: ids.length ? ids[ids.length - 1] : params.id }), { signal });
+      if (cont) data = await api('/api/shorts' + qs({ cont, seed: engaged.shift() }), { signal });
+      else data = await api('/api/shorts' + qs({ seed: params.id }), { signal });
       cont = data.cont;
       const fresh = data.ids.filter((id) => !ids.includes(id));
       for (const id of fresh) addSlide(id);
@@ -62,10 +62,10 @@ export default async function shorts({ node, params, signal }) {
         <div class="short-progress"><div></div></div>
       </div>
       <div class="short-actions">
-        <button class="short-act like" aria-label="Mag ich"><span class="sa-icon">${raw(icon('like'))}</span><span class="like-count">Mag ich</span></button>
-        <button class="short-act dislike" aria-label="Mag ich nicht"><span class="sa-icon">${raw(icon('dislike'))}</span><span>Mag ich nicht</span></button>
-        <button class="short-act comments" aria-label="Kommentare"><span class="sa-icon">${raw(icon('comment'))}</span><span class="comment-count">Kommentare</span></button>
-        <button class="short-act share" aria-label="Teilen"><span class="sa-icon">${raw(icon('share'))}</span><span>Teilen</span></button>
+        <button class="short-act like" aria-label="Mag ich"><span class="sa-icon">${raw(icon('likeFilled'))}</span><span class="like-count">Mag ich</span></button>
+        <button class="short-act dislike" aria-label="Mag ich nicht"><span class="sa-icon">${raw(icon('dislikeFilled'))}</span><span>Mag ich nicht</span></button>
+        <button class="short-act comments" aria-label="Kommentare"><span class="sa-icon">${raw(icon('commentFilled'))}</span><span class="comment-count">Kommentare</span></button>
+        <button class="short-act share" aria-label="Teilen"><span class="sa-icon">${raw(icon('shareFilled'))}</span><span>Teilen</span></button>
         <button class="short-act more" aria-label="Mehr"><span class="sa-icon">${raw(icon('moreH'))}</span></button>
         <a class="short-act ch-thumb" aria-label="Kanal"></a>
       </div>
@@ -124,9 +124,15 @@ export default async function shorts({ node, params, signal }) {
     const likeBtn = slide.querySelector('.like');
     const dislikeBtn = slide.querySelector('.dislike');
     // Aktiv = gefülltes Symbol (wie in der App).
+    // Wie in der App: Symbole immer gefüllt, aktiv mit hellem Kreis und kurzem "Pop".
     const paintRating = () => {
-      likeBtn.querySelector('.sa-icon').innerHTML = icon(likeBtn.classList.contains('on') ? 'likeFilled' : 'like');
-      dislikeBtn.querySelector('.sa-icon').innerHTML = icon(dislikeBtn.classList.contains('on') ? 'dislikeFilled' : 'dislike');
+      for (const b of [likeBtn, dislikeBtn]) {
+        b.classList.remove('pop');
+        if (b.classList.contains('on')) {
+          void b.offsetWidth;
+          b.classList.add('pop');
+        }
+      }
     };
     slide._paintRating = paintRating;
     const rate = async (r) => {
@@ -151,7 +157,10 @@ export default async function shorts({ node, params, signal }) {
         toast(e.message);
       }
     };
-    likeBtn.onclick = () => rate(likeBtn.classList.contains('on') ? 'none' : 'like');
+    likeBtn.onclick = () => {
+      if (!likeBtn.classList.contains('on')) markEngaged(id);
+      rate(likeBtn.classList.contains('on') ? 'none' : 'like');
+    };
     dislikeBtn.onclick = () => rate(dislikeBtn.classList.contains('on') ? 'none' : 'dislike');
     slide.querySelector('.comments').onclick = () => openComments(id, slide._meta?.comments || '');
     slide.querySelector('.share').onclick = () => {
@@ -180,6 +189,53 @@ export default async function shorts({ node, params, signal }) {
     }
   }, { root: scroller, threshold: [0, 0.6] });
 
+  // ---- Schneller Start: ein Player für alle Shorts, der nächste wird vorgeladen ----------
+  const streamCache = new Map(); // id -> Promise<streams>
+  const preloads = new Map(); // id -> Promise<PreloadManager|null>
+  const getStreams = (id) => {
+    if (!streamCache.has(id)) streamCache.set(id, api(`/api/streams/${id}`, { signal }).catch((e) => (streamCache.delete(id), Promise.reject(e))));
+    return streamCache.get(id);
+  };
+  const SHAKA_CONFIG = {
+    streaming: { bufferingGoal: 12, rebufferingGoal: 0.4, bufferBehind: 10 },
+    manifest: { dash: { ignoreMinBufferTime: true } },
+    abr: { defaultBandwidthEstimate: 2_500_000 }
+  };
+
+  async function ensureShaka() {
+    if (shakaPlayer || !window.shaka?.Player?.isBrowserSupported()) return shakaPlayer;
+    window.shaka.polyfill.installAll();
+    const p = new window.shaka.Player();
+    await p.attach(video);
+    p.configure(SHAKA_CONFIG);
+    shakaPlayer = p;
+    return p;
+  }
+
+  // Lädt Manifest und erste Segmente eines kommenden Shorts, während der aktuelle läuft.
+  function preloadShort(id) {
+    if (!id || preloads.has(id)) return;
+    const promise = getStreams(id)
+      .then(async (s) => {
+        const p = await ensureShaka();
+        if (!p || !s.dash || typeof p.preload !== 'function') return null;
+        return p.preload(s.dash, 0, 'application/dash+xml');
+      })
+      .catch(() => null);
+    preloads.set(id, promise);
+    // Vorschaubild ebenfalls schon laden.
+    const img = new Image();
+    img.src = `https://i.ytimg.com/vi/${id}/oar2.jpg`;
+  }
+
+  function dropPreloads(keep) {
+    for (const [id, pr] of preloads) {
+      if (keep.includes(id)) continue;
+      preloads.delete(id);
+      pr.then((m) => m?.destroy?.()).catch(() => {});
+    }
+  }
+
   async function activate(idx) {
     active = idx;
     const id = ids[idx];
@@ -192,9 +248,9 @@ export default async function shorts({ node, params, signal }) {
     const token = ++loadToken;
     video.pause();
     try {
-      const s = await api(`/api/streams/${id}`, { signal });
+      const s = await getStreams(id);
       if (token !== loadToken) return;
-      await attach(s, token);
+      await attach(id, s, token);
       if (token !== loadToken) return;
       video.play().catch(() => {
         // Autoplay mit Ton blockiert → stumm versuchen.
@@ -207,41 +263,53 @@ export default async function shorts({ node, params, signal }) {
     } finally {
       if (token === loadToken) slide.classList.remove('loading');
     }
-    // Nächste Shorts vorbereiten.
-    if (ids[idx + 1]) api(`/api/streams/${ids[idx + 1]}`, { signal }).catch(() => {});
-    if (idx >= ids.length - 4) fetchMore().catch(() => {});
+    // Die nächsten zwei Shorts vorladen (Video + Infos), ältere Vorladungen freigeben.
+    const upcoming = [ids[idx + 1], ids[idx + 2]].filter(Boolean);
+    dropPreloads(upcoming);
+    upcoming.forEach(preloadShort);
+    for (const n of [idx + 1, idx + 2, idx + 3]) if (scroller.children[n]) fillSlide(scroller.children[n], ids[n]);
+    if (idx >= ids.length - 5) fetchMore().catch(() => {});
   }
 
-  async function attach(s, token) {
-    if (shakaPlayer) {
-      const p = shakaPlayer;
-      shakaPlayer = null;
-      await p.destroy().catch(() => {});
-    }
+  async function attach(id, s, token) {
     video.removeAttribute('src');
-    if (window.shaka?.Player?.isBrowserSupported() && (s.dash || s.hls)) {
-      window.shaka.polyfill.installAll();
-      for (const url of [s.dash, s.hls].filter(Boolean)) {
-        const p = new window.shaka.Player();
+    const p = await ensureShaka().catch(() => null);
+    if (p && (s.dash || s.hls)) {
+      const pre = preloads.get(id);
+      preloads.delete(id);
+      const manager = pre ? await pre : null;
+      if (token !== loadToken) return;
+      try {
+        if (manager) await p.load(manager);
+        else await p.load(s.dash || s.hls, 0, s.dash ? 'application/dash+xml' : 'application/x-mpegurl');
+        return;
+      } catch (e) {
+        if (token !== loadToken) return;
+        // Vorladung abgelaufen o. Ä. → normal laden.
         try {
-          await p.attach(video);
-          p.configure({ streaming: { bufferingGoal: 20 }, abr: { defaultBandwidthEstimate: 3_000_000 } });
-          await p.load(url);
-          if (token !== loadToken) {
-            await p.destroy();
-            return;
-          }
-          shakaPlayer = p;
+          await p.load(s.dash || s.hls);
           return;
-        } catch {
-          await p.destroy().catch(() => {});
-        }
+        } catch {}
       }
     }
+    if (shakaPlayer) await shakaPlayer.unload().catch(() => {});
     const prog = [...(s.progressive || [])].sort((a, b) => parseInt(b.label) - parseInt(a.label));
     if (prog[0]) video.src = prog[0].url;
     else throw new Error('Keine abspielbare Quelle gefunden');
   }
+
+  // Lernsignal: Was du likest oder fast ganz schaust, wird Startpunkt für die nächsten Shorts.
+  const engaged = [];
+  const markEngaged = (id) => {
+    if (id && !engaged.includes(id)) engaged.push(id);
+  };
+  video.addEventListener('timeupdate', () => {
+    const slide = scroller.children[active];
+    if (slide && !slide.dataset.engaged && video.duration && video.currentTime / video.duration > 0.85) {
+      slide.dataset.engaged = '1';
+      markEngaged(ids[active]);
+    }
+  });
 
   video.addEventListener('timeupdate', () => {
     const slide = scroller.children[active];

@@ -22,6 +22,16 @@ function channelLink(ch) {
   return '';
 }
 
+// Kleine WebP-Vorschaubilder (statt großer JPGs) – der Browser wählt die passende Größe.
+const YT_ID = /^[\w-]{11}$/;
+let eagerImages = 4; // die ersten Bilder sofort laden, den Rest erst beim Scrollen
+function thumbImg(item) {
+  const lazy = eagerImages-- > 0 ? raw('fetchpriority="high"') : raw('loading="lazy"');
+  if (!YT_ID.test(item.id || '')) return html`<img src="${item.thumbnail}" alt="" ${lazy} decoding="async">`;
+  const b = `https://i.ytimg.com/vi_webp/${item.id}/`;
+  return html`<img src="${b}mqdefault.webp" srcset="${b}mqdefault.webp 320w, ${b}hqdefault.webp 480w, ${b}sddefault.webp 640w" sizes="(max-width: 791px) 60vw, 360px" alt="" ${lazy} decoding="async" data-fallback="https://i.ytimg.com/vi/${item.id}/mqdefault.jpg">`;
+}
+
 function videoHref(item, extra = '') {
   const t = item.listId ? `&list=${encodeURIComponent(item.listId)}${item.index ? `&index=${encodeURIComponent(item.index)}` : ''}` : '';
   return `/watch?v=${item.id}${t}${extra}`;
@@ -53,7 +63,7 @@ export function videoCard(item, variant = 'grid') {
   const card = el(html`
     <div class="video-card v-${variant}" data-id="${item.id}">
       <a class="thumb" href="${href}" tabindex="-1" aria-hidden="true">
-        <img src="${item.thumbnail}" alt="" loading="lazy" data-fallback="https://i.ytimg.com/vi/${item.id}/mqdefault.jpg">
+        ${thumbImg(item)}
         ${thumbBadge(item)}
         ${progressBar(item)}
       </a>
@@ -85,7 +95,7 @@ export function shortCard(item, variant = 'grid') {
   const card = el(html`
     <div class="short-card s-${variant}" data-id="${item.id}">
       <a class="short-thumb" href="/shorts/${item.id}">
-        <img src="${item.thumbnail}" alt="" loading="lazy" data-fallback="https://i.ytimg.com/vi/${item.id}/hq2.jpg">
+        <img src="${item.thumbnail}" alt="" loading="lazy" decoding="async" data-fallback="https://i.ytimg.com/vi/${item.id}/hq2.jpg">
       </a>
       <div class="short-info">
         <h3 class="short-title"><a href="/shorts/${item.id}">${item.title}</a></h3>
@@ -501,19 +511,23 @@ export function shareDialog(video, time = 0) {
 
 export async function downloadDialog(video) {
   const body = el('<div class="download-list"><div class="spinner"></div></div>');
-  openDialog({ title: 'Herunterladen', body });
+  openDialog({ title: 'Herunterladen', body, className: 'download-dialog' });
   try {
-    const s = await api(`/api/streams/${video.id}`);
+    const { options } = await api(`/api/download/${video.id}`);
     body.innerHTML = '';
+    if (!options.length) body.textContent = 'Für dieses Video sind keine Downloads verfügbar.';
     const safe = (video.title || video.id).replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120);
-    const rows = [
-      ...s.progressive.map((f) => ({ label: `Video ${f.label}`, sub: f.mime.split(';')[0], url: `${f.url}&dl=${encodeURIComponent(safe + '.mp4')}` })),
-      ...s.audio.map((f) => ({ label: `Nur Audio ${f.label}`, sub: 'audio/mp4', url: `${f.url}&dl=${encodeURIComponent(safe + '.m4a')}` }))
-    ];
-    if (!rows.length) body.textContent = 'Für dieses Video sind keine Downloads verfügbar.';
-    for (const r of rows) {
-      body.appendChild(el(html`<a class="menu-item" href="${r.url}" download>${raw(icon('download'))}<span>${r.label}</span><small class="muted">${r.sub}</small></a>`));
+    for (const o of options) {
+      // Direkte Links (einfacher Download) bekommen einen Dateinamen über den Proxy.
+      const href = o.direct ? `${o.url}&dl=${encodeURIComponent(safe + (o.kind === 'audio' ? '.m4a' : '.mp4'))}` : o.url;
+      const row = el(html`<a class="menu-item dl-row" href="${href}" download>${raw(icon(o.kind === 'audio' ? 'music' : 'download'))}<span><b>${o.label}</b><small class="muted">${o.sub}</small></span></a>`);
+      row.addEventListener('click', () => {
+        toast(`Download gestartet: ${o.label}`);
+        setTimeout(closeOverlay, 300);
+      });
+      body.appendChild(row);
     }
+    body.appendChild(el('<p class="muted small dl-hint">Hohe Qualitäten werden beim Herunterladen aus Bild und Ton zusammengesetzt.</p>'));
   } catch (e) {
     body.textContent = e.message;
   }

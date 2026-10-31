@@ -152,11 +152,12 @@ export class Player {
           await p.attach(this.video);
           p.configure({
             streaming: {
-              bufferingGoal: 40,
-              rebufferingGoal: 1.5,
+              bufferingGoal: 30,
+              rebufferingGoal: 0.6,
               bufferBehind: 20,
               retryParameters: { maxAttempts: 4, baseDelay: 500, backoffFactor: 2, timeout: 20000 }
             },
+            manifest: { dash: { ignoreMinBufferTime: true } },
             abr: { enabled: true, defaultBandwidthEstimate: 3_000_000 },
             preferredAudioLanguage: state.settings.lang || 'de',
             preferredVariantRole: 'main'

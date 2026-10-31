@@ -6,8 +6,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { routes, httpError } from './api.js';
-import { proxy } from './stream.js';
+import { routes, httpError, warmHome } from './api.js';
+import { proxy, download } from './stream.js';
 import { getYT } from './yt.js';
 import { store } from './store.js';
 
@@ -126,6 +126,13 @@ async function handle(req, res) {
   const { pathname } = url;
 
   if (pathname === '/vp') return proxy(req, res, url.searchParams);
+  const dl = pathname.match(/^\/dl\/([\w-]{11})$/);
+  if (dl) {
+    return download(req, res, dl[1], url.searchParams).catch((e) => {
+      if (res.headersSent) return res.destroy();
+      sendJson(res, e.status || 500, { error: e.message });
+    });
+  }
 
   if (pathname.startsWith('/api/')) {
     // Schreibende Anfragen nur mit eigenem Header (verhindert CSRF von fremden Webseiten).
@@ -203,7 +210,9 @@ if (isMain) {
     if (LAN) for (const ip of lanAddresses()) console.log(`    Im WLAN:           http://${ip}:${PORT}`);
     console.log('    Beenden mit Strg+C\n');
     // Sitzung schon vorab aufbauen, damit die erste Seite schneller lädt.
-    getYT().catch((e) => console.warn('[yt] Sitzung konnte nicht erstellt werden:', e.message));
+    getYT()
+      .then(() => warmHome())
+      .catch((e) => console.warn('[yt] Sitzung konnte nicht erstellt werden:', e.message));
   });
   // Beenden darf nie an einem Fehler beim letzten Speichern hängen bleiben.
   const stop = () => {
