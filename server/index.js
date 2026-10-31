@@ -205,9 +205,15 @@ if (isMain) {
     // Sitzung schon vorab aufbauen, damit die erste Seite schneller lädt.
     getYT().catch((e) => console.warn('[yt] Sitzung konnte nicht erstellt werden:', e.message));
   });
+  // Beenden darf nie an einem Fehler beim letzten Speichern hängen bleiben.
   const stop = () => {
-    store.flush();
-    process.exit(0);
+    try {
+      store.flush();
+    } catch (e) {
+      console.error('[stop] Speichern fehlgeschlagen:', e.message);
+    } finally {
+      process.exit(0);
+    }
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);

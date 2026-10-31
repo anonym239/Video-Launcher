@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-test('Server startet über einen Symlink-Pfad', async () => {
+test('Server startet über einen Symlink-Pfad', { timeout: 30000 }, async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vl-link-'));
   fs.symlinkSync(ROOT, path.join(tmp, 'link'));
   const port = 20000 + Math.floor(Math.random() * 20000);
@@ -26,7 +26,12 @@ test('Server startet über einen Symlink-Pfad', async () => {
     }
     assert.ok(ok, 'Server antwortet nicht');
   } finally {
-    child.kill();
+    // Erst warten, bis der Server wirklich beendet ist, dann aufräumen.
+    const exited = new Promise((r) => child.once('exit', r));
+    child.kill('SIGTERM');
+    const timer = setTimeout(() => child.kill('SIGKILL'), 5000);
+    await exited;
+    clearTimeout(timer);
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });

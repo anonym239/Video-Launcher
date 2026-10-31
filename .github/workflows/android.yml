@@ -37,6 +37,7 @@ jobs:
         run: npm ci
 
       - name: Tests
+        timeout-minutes: 5
         run: npm test
 
       - name: Node-Projekt und libnode vorbereiten
