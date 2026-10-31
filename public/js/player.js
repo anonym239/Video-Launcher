@@ -60,7 +60,7 @@ export class Player {
               <div class="p-right">
                 <label class="p-autoplay" title="Autoplay"><input type="checkbox" class="p-autoplay-input"><span class="p-switch"></span></label>
                 <button class="p-btn p-cc" data-act="cc" aria-label="Untertitel (c)">${raw(icon('cc'))}</button>
-                <button class="p-btn p-settings-btn" data-act="settings" aria-label="Einstellungen">${raw(icon('settings'))}</button>
+                <button class="p-btn p-settings-btn" data-act="settings" aria-label="Einstellungen">${raw(icon('gear'))}</button>
                 <button class="p-btn p-pip" data-act="pip" aria-label="Bild-in-Bild">${raw(icon('pip'))}</button>
                 <button class="p-btn p-theater" data-act="theater" aria-label="Kinomodus (t)">${raw(icon('theater'))}</button>
                 <button class="p-btn p-fs" data-act="fullscreen" aria-label="Vollbild (f)">${raw(icon('fullscreen'))}</button>

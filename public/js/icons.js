@@ -89,11 +89,94 @@ const P = {
 // Symbole mit Aussparungen (z. B. Play-Dreieck im Shorts-Symbol).
 const EVENODD = new Set(['shorts', 'shortsFilled']);
 
+// Moderne Linien-Symbole (eigene Zeichnungen, 24×24, runde Enden).
+const S = {
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.8-4.8"/>',
+  mic: '<rect x="9" y="3" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>',
+  back: '<path d="M19 12H5M11 18l-6-6 6-6"/>',
+  close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  bell: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 21a2 2 0 0 0 4 0"/>',
+  bellOff: '<path d="M8.5 5.6A6 6 0 0 1 18 11v4M6 11v5.5l-1.5 2H17M10 21a2 2 0 0 0 4 0M3 3l18 18"/>',
+  home: '<path d="M4 10.4 12 4l8 6.4V19a1.5 1.5 0 0 1-1.5 1.5H15v-6H9v6H5.5A1.5 1.5 0 0 1 4 19z"/>',
+  subs: '<rect x="3" y="8" width="18" height="12.5" rx="3"/><path d="M6 4.8h12"/><path d="M10.3 11.6v5.4l4.6-2.7z"/>',
+  library: '<circle cx="12" cy="8.5" r="3.8"/><path d="M4.8 20.5c.9-3.7 3.7-5.8 7.2-5.8s6.3 2.1 7.2 5.8"/>',
+  history: '<path d="M3.6 12a8.4 8.4 0 1 0 2.5-6"/><path d="M3.6 4.4V9H8"/><path d="M12 7.8v4.6l3 1.8"/>',
+  clock: '<circle cx="12" cy="12" r="8.6"/><path d="M12 7.6V12l3 2"/>',
+  like: '<path d="M7.2 10.2v10.3H4.6A1.6 1.6 0 0 1 3 18.9v-7.1a1.6 1.6 0 0 1 1.6-1.6z"/><path d="M7.2 10.2 11 3a2.3 2.3 0 0 1 3 2.9l-1 3.6h5.5a2.2 2.2 0 0 1 2.2 2.6l-1.4 6.6a2.2 2.2 0 0 1-2.2 1.8H7.2"/>',
+  dislike: '<g transform="rotate(180 12 12)"><path d="M7.2 10.2v10.3H4.6A1.6 1.6 0 0 1 3 18.9v-7.1a1.6 1.6 0 0 1 1.6-1.6z"/><path d="M7.2 10.2 11 3a2.3 2.3 0 0 1 3 2.9l-1 3.6h5.5a2.2 2.2 0 0 1 2.2 2.6l-1.4 6.6a2.2 2.2 0 0 1-2.2 1.8H7.2"/></g>',
+  comment: '<path d="M20.5 11.6c0 4.4-3.8 8-8.5 8-1.3 0-2.5-.3-3.6-.8L3.5 20l1.3-4A7.6 7.6 0 0 1 3.5 11.6c0-4.4 3.8-8 8.5-8s8.5 3.6 8.5 8z"/>',
+  share: '<path d="M13.5 5 21 11.6l-7.5 6.6v-4c-5.6 0-8.9 1.7-11 5.3.6-5.6 3.8-9.9 11-10.6z"/>',
+  save: '<path d="M4 6.5h11M4 11.5h11M4 16.5h7M18 13.5v7M14.5 17h7"/>',
+  download: '<path d="M12 3.8v11.4M7.4 10.8 12 15.4l4.6-4.6M5 20h14"/>',
+  playlist: '<path d="M4 6.5h12M4 11.5h12M4 16.5h7"/><path d="M15 14.6v5.8l4.6-2.9z"/>',
+  queue: '<rect x="3" y="4" width="18" height="12.5" rx="2.5"/><path d="M8 20.5h8M12 7.5v6M9 10.5h6"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.2 14.6a1.6 1.6 0 0 0 .3 1.8l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5v.2a1.9 1.9 0 1 1-3.8 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1h-.2a1.9 1.9 0 1 1 0-3.8h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.6 1.6 0 0 0 1.8.3h.1a1.6 1.6 0 0 0 1-1.5v-.2a1.9 1.9 0 1 1 3.8 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.5 1h.2a1.9 1.9 0 1 1 0 3.8h-.1a1.6 1.6 0 0 0-1.5 1z"/>',
+  account: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="10" r="3.2"/><path d="M6.4 18.6c1.3-2 3.3-3 5.6-3s4.3 1 5.6 3"/>',
+  accountBox: '<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><circle cx="12" cy="10" r="3"/><path d="M7 17.5c1.1-1.7 2.9-2.6 5-2.6s3.9.9 5 2.6"/>',
+  logout: '<path d="M9 20.5H5.6A1.6 1.6 0 0 1 4 18.9V5.1a1.6 1.6 0 0 1 1.6-1.6H9M15.5 16.5 20 12l-4.5-4.5M20 12H9"/>',
+  theme: '<path d="M20 14.6A8.2 8.2 0 1 1 9.4 4a6.6 6.6 0 0 0 10.6 10.6z"/>',
+  trending: '<path d="M12 21c3.9 0 6.5-2.6 6.5-6.3 0-3.9-2.8-6.3-4.7-9.7-.8 2.4-1.9 3.6-3.4 4.3C10 7.6 9.3 6.4 9 5c-2 2.4-3.5 5.6-3.5 9.7C5.5 18.4 8.1 21 12 21z"/>',
+  music: '<path d="M9 18V5.2l11-2v12.6"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="15.8" r="2.5"/>',
+  gaming: '<rect x="2.5" y="7" width="19" height="11" rx="5.5"/><path d="M7 12.5h4M9 10.5v4M15.5 11.2v.1M17.5 13.6v.1"/>',
+  news: '<rect x="3.5" y="4" width="17" height="16" rx="2.5"/><path d="M7.5 8.5h9M7.5 12h9M7.5 15.5h5"/>',
+  sports: '<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5.2a3 3 0 0 0 2.8 4M16 6h2.8a3 3 0 0 1-2.8 4M12 13v4M8.5 20.5h7M10 17h4"/>',
+  live: '<circle cx="12" cy="12" r="1.8"/><path d="M8.3 8.3a5.2 5.2 0 0 0 0 7.4M15.7 8.3a5.2 5.2 0 0 1 0 7.4M5.5 5.5a9.2 9.2 0 0 0 0 13M18.5 5.5a9.2 9.2 0 0 1 0 13"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  add: '<path d="M12 5v14M5 12h14"/>',
+  sort: '<path d="M4 7h16M4 12h11M4 17h6"/>',
+  tune: '<path d="M4 7h9M18 7h2M4 17h4M12 17h8"/><circle cx="15.5" cy="7" r="2.3"/><circle cx="9.8" cy="17" r="2.3"/>',
+  delete: '<path d="M4.5 6.5h15M10 3.5h4M6.5 6.5l.9 12.6a1.6 1.6 0 0 0 1.6 1.4h6a1.6 1.6 0 0 0 1.6-1.4l.9-12.6M10 10.5v6M14 10.5v6"/>',
+  down: '<path d="m6 9 6 6 6-6"/>',
+  up: '<path d="m6 15 6-6 6 6"/>',
+  left: '<path d="m15 6-6 6 6 6"/>',
+  right: '<path d="m9 6 6 6-6 6"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.1"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.3-2.5 3.8M12 17.2v.1"/>',
+  lock: '<rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.7 5.6 3.7 9s-1.2 6.4-3.7 9c-2.5-2.6-3.7-5.6-3.7-9S9.5 5.6 12 3z"/>',
+  link: '<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/>',
+  external: '<path d="M14 4h6v6M20 4l-9 9M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>',
+  edit: '<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
+  send: '<path d="M21 3 3 10.5l7 3.5 3.5 7z"/><path d="m10 14 4.5-4.5"/>',
+  block: '<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>',
+  refresh: '<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>',
+  upload: '<path d="M12 15V3.8M7.4 8.4 12 3.8l4.6 4.6M5 20h14"/>',
+  pin: '<path d="M9 3.5h6M10 3.5v5.5l-3 3.5v1.5h10v-1.5l-3-3.5V3.5M12 14v6.5"/>',
+  heart: '<path d="M12 20s-7.5-4.4-7.5-10A4.3 4.3 0 0 1 12 7.2 4.3 4.3 0 0 1 19.5 10c0 5.6-7.5 10-7.5 10z"/>',
+  shuffle: '<path d="M3 7h3.5c2 0 3.4 1 4.5 2.6l2 3c1.1 1.6 2.5 2.4 4.5 2.4H21M18 12l3 3-3 3M3 17h3.5c1.4 0 2.5-.5 3.4-1.4M14 8.4c.9-.9 2-1.4 3.5-1.4H21M18 4l3 3-3 3"/>',
+  repeat: '<path d="M17 3l3 3-3 3M4 11V9.5A3.5 3.5 0 0 1 7.5 6H20M7 21l-3-3 3-3M20 13v1.5a3.5 3.5 0 0 1-3.5 3.5H4"/>',
+  expand: '<path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/>',
+  moreH: '<path d="M6 12h.01M12 12h.01M18 12h.01" stroke-width="3"/>',
+  more: '<path d="M12 6h.01M12 12h.01M12 18h.01" stroke-width="3"/>'
+};
+
+// Gefüllte Varianten (aktive Navigation, Shorts-Aktionen).
+const F = {
+  homeFilled: '<path d="M4 10.4 12 4l8 6.4V19a1.5 1.5 0 0 1-1.5 1.5H15v-6H9v6H5.5A1.5 1.5 0 0 1 4 19z"/>',
+  subsFilled: '<path d="M6 4.8h12" fill="none"/><path fill-rule="evenodd" d="M6 8h12a3 3 0 0 1 3 3v6.5a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V11a3 3 0 0 1 3-3zm4.3 3.6v5.4l4.6-2.7z"/>',
+  libraryFilled: '<circle cx="12" cy="8.5" r="3.8"/><path d="M4.8 20.5c.9-3.7 3.7-5.8 7.2-5.8s6.3 2.1 7.2 5.8z"/>',
+  likeFilled: '<path d="M7.2 10.2v10.3H4.6A1.6 1.6 0 0 1 3 18.9v-7.1a1.6 1.6 0 0 1 1.6-1.6z"/><path d="M8.8 10.2 11 3a2.3 2.3 0 0 1 3 2.9l-1 3.6h5.5a2.2 2.2 0 0 1 2.2 2.6l-1.4 6.6a2.2 2.2 0 0 1-2.2 1.8H8.8z"/>',
+  dislikeFilled: '<g transform="rotate(180 12 12)"><path d="M7.2 10.2v10.3H4.6A1.6 1.6 0 0 1 3 18.9v-7.1a1.6 1.6 0 0 1 1.6-1.6z"/><path d="M8.8 10.2 11 3a2.3 2.3 0 0 1 3 2.9l-1 3.6h5.5a2.2 2.2 0 0 1 2.2 2.6l-1.4 6.6a2.2 2.2 0 0 1-2.2 1.8H8.8z"/></g>',
+  commentFilled: '<path d="M20.5 11.6c0 4.4-3.8 8-8.5 8-1.3 0-2.5-.3-3.6-.8L3.5 20l1.3-4A7.6 7.6 0 0 1 3.5 11.6c0-4.4 3.8-8 8.5-8s8.5 3.6 8.5 8z"/>',
+  shareFilled: '<path d="M13.5 5 21 11.6l-7.5 6.6v-4c-5.6 0-8.9 1.7-11 5.3.6-5.6 3.8-9.9 11-10.6z"/>',
+  bellFilled: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 21a2 2 0 0 0 4 0" fill="none"/>'
+};
+
+const SVG = 'viewBox="0 0 24 24" aria-hidden="true" focusable="false"';
+
 export function icon(name, cls = '') {
-  const d = P[name];
+  if (S[name]) {
+    return `<svg class="icon ic-line ${cls}" ${SVG} fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${S[name]}</svg>`;
+  }
+  if (F[name]) {
+    return `<svg class="icon ic-fill ${cls}" ${SVG} fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${F[name]}</svg>`;
+  }
+  // Player-Steuerung & Sonderfälle: klassische gefüllte Material-Pfade.
+  const d = P[name === 'gear' ? 'settings' : name];
   if (!d) return '';
   const rule = EVENODD.has(name) ? ' fill-rule="evenodd"' : '';
-  return `<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path${rule} d="${d}"/></svg>`;
+  return `<svg class="icon ${cls}" ${SVG}><path${rule} d="${d}"/></svg>`;
 }
 
-export const ICON_NAMES = Object.keys(P);
+export const ICON_NAMES = [...new Set([...Object.keys(P), ...Object.keys(S), ...Object.keys(F), 'gear'])];

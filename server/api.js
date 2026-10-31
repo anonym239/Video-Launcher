@@ -4,11 +4,12 @@ import { formatNumberDe } from './polyfills.js';
 import { getYT, resetYT, authState, isSignedIn, startOAuth, cancelOAuth, cookieLogin, signOut } from './yt.js';
 import { store } from './store.js';
 import {
-  collectItems, itemsFromFeed, normalizeComment, textToHtml, thumb, txt, escapeHtml, videoThumb, formatDuration, unwrap
+  collectItems, itemsFromFeed, itemsFromTvRaw, normalizeComment, textToHtml, thumb, txt, escapeHtml, videoThumb, formatDuration, unwrap
 } from './normalize.js';
 import { streamsFor, dashManifest, invalidate } from './stream.js';
 import { localSubscriptionFeed } from './rss.js';
 import { EndlessFeed, shuffle } from './endless.js';
+import { forYou } from './recommend.js';
 
 // ---- Fortsetzungen (Endlos-Scrollen) ----------------------------------------
 const conts = new Map();
@@ -72,6 +73,14 @@ async function nextPage(key) {
   }
 }
 
+// Mit Geräte-Code-Anmeldung (TV) lehnt die Web-Schnittstelle manche privaten Listen ab
+// ("Die Playlist ist nicht vorhanden"). Dann über die TV-Schnittstelle laden.
+async function tvBrowse(browseId) {
+  const yt = await getYT();
+  const res = await yt.actions.execute('/browse', { browseId, client: 'TV', parse: false });
+  return itemsFromTvRaw(res?.data ?? res);
+}
+
 export function httpError(status, message) {
   return Object.assign(new Error(message), { status });
 }
@@ -129,19 +138,35 @@ export const routes = {
     }
     let items = feed ? itemsFromFeed(feed) : [];
     let cont = items.length && hasCont(feed) ? saveCont(feed, 'home') : null;
-    if (!items.length) {
-      chips = [];
-      if (historySeeds.length) {
-        // Eigene Empfehlungen aus dem Verlauf (wie "Für dich").
-        const endless = new EndlessFeed(getYT, shuffle(historySeeds));
-        items = await endless.next();
+    // Angemeldet, aber die Web-Startseite ist leer (TV-Anmeldung) → TV-Startseite.
+    if (isSignedIn() && !items.length) {
+      for (const id of ['FEwhat_to_watch', 'default']) {
+        items = await tvBrowse(id).catch(() => []);
+        if (items.length) break;
+      }
+      if (items.length) cont = endlessCont(items, historySeeds);
+    }
+    // Ohne Konto ist YouTubes Startseite allgemein. Dann eigene Empfehlungen
+    // "Für dich" aus Verlauf und Abos (mit Chip-Filter bleibt YouTubes Ergebnis).
+    if (!isSignedIn() && !(chip && chip !== chips[0])) {
+      const shelves = items.filter((i) => i.type === 'shelf');
+      const mix = await forYou(yt, {
+        history: store.history,
+        subsFeed: async () => (await localSubscriptionFeed(store.subscriptions)).items,
+        homeItems: items
+      });
+      if (mix.items.length) {
+        // Shorts-Regal von YouTube an dritter Stelle behalten (wie in der App).
+        items = [...mix.items.slice(0, 6), ...shelves.slice(0, 1), ...mix.items.slice(6)];
+        const endless = new EndlessFeed(getYT, shuffle(mix.seeds), mix.items.map((v) => v.id).concat(store.history.map((v) => v.id)));
         cont = saveCont(endless, 'endless');
       }
-      if (!items.length) {
-        const search = await yt.search(store.settings.region === 'DE' ? 'Trends Deutschland' : 'trending', { type: 'video', upload_date: 'week' });
-        items = collectItems(search.results);
-        cont = hasCont(search) ? saveCont(search, 'search') : null;
-      }
+    }
+    if (!items.length) {
+      chips = [];
+      const search = await yt.search(store.settings.region === 'DE' ? 'Trends Deutschland' : 'trending', { type: 'video', upload_date: 'week' });
+      items = collectItems(search.results);
+      cont = hasCont(search) ? saveCont(search, 'search') : null;
     }
     if (!cont) cont = endlessCont(items, historySeeds);
     return { items, cont, chips };
@@ -330,7 +355,13 @@ export const routes = {
       return { items: collectItems(next.items), cont: hasCont(next) ? saveCont(next, 'playlist') : null };
     }
     const yt = await getYT();
-    const p = await yt.getPlaylist(id);
+    let p;
+    try {
+      p = await yt.getPlaylist(id);
+    } catch (e) {
+      if (!['WL', 'LL'].includes(id) && !id.startsWith('PL')) throw e;
+      return playlistFallback(id, e);
+    }
     const i = p.info || {};
     const items = collectItems(p.items);
     return {
@@ -423,7 +454,14 @@ export const routes = {
     if (isSignedIn() && q.get('local') !== '1') {
       if (q.get('cont')) return feedResult(await loadCont(q.get('cont'), 'subs').getContinuation(), 'subs');
       const yt = await getYT();
-      return feedResult(await yt.getSubscriptionsFeed(), 'subs');
+      try {
+        const res = feedResult(await yt.getSubscriptionsFeed(), 'subs');
+        if (res.items.length) return res;
+      } catch (e) {
+        console.warn('[abos] Web-Abruf fehlgeschlagen:', e.message);
+      }
+      const items = await tvBrowse('FEsubscriptions').catch(() => []);
+      if (items.length) return { items, cont: null };
     }
     const { items, errors } = await localSubscriptionFeed(store.subscriptions, { shorts: q.get('shorts') === '1' });
     return { items, cont: null, local: true, errors };
@@ -542,8 +580,17 @@ export const routes = {
     if (isSignedIn() && q.get('local') !== '1') {
       const yt = await getYT();
       if (q.get('cont')) return historyResult(await loadCont(q.get('cont'), 'history').getContinuation());
-      const h = q.get('q') ? await (await yt.getHistory()).search(q.get('q')) : await yt.getHistory();
-      return historyResult(h);
+      try {
+        const h = q.get('q') ? await (await yt.getHistory()).search(q.get('q')) : await yt.getHistory();
+        const res = historyResult(h);
+        if (res.items.length || res.sections.length) return res;
+      } catch (e) {
+        console.warn('[verlauf] Web-Abruf fehlgeschlagen:', e.message);
+      }
+      if (!q.get('q')) {
+        const items = await tvBrowse('FEhistory').catch(() => []);
+        if (items.length) return { sections: [], items, cont: null };
+      }
     }
     const query = (q.get('q') || '').toLowerCase();
     const list = store.history.filter((v) => !query || v.title.toLowerCase().includes(query) || v.channel?.name?.toLowerCase().includes(query));
@@ -746,6 +793,24 @@ export const routes = {
     return publicAuth();
   }
 };
+
+async function playlistFallback(id, err) {
+  const titles = { WL: 'Später ansehen', LL: 'Videos mit „Mag ich“-Bewertung' };
+  let items = [];
+  try {
+    if (isSignedIn()) items = await tvBrowse('VL' + id);
+  } catch (e) {
+    console.warn('[playlist] TV-Abruf fehlgeschlagen:', e.message);
+  }
+  const local = id === 'WL' ? store.listOf('watchLater') : id === 'LL' ? store.listOf('liked') : [];
+  if (!items.length && !local.length && !titles[id]) throw err;
+  const all = [...items, ...local.filter((v) => !items.some((i) => i.id === v.id)).map((v) => ({ type: 'video', ...v }))];
+  return {
+    info: { id, title: titles[id] || 'Playlist', count: `${all.length} Videos`, thumbnail: all[0]?.thumbnail || '', author: { name: 'Du' }, editable: !items.length, local: !items.length },
+    items: all,
+    cont: null
+  };
+}
 
 // ---- Hilfsfunktionen ----------------------------------------------------------
 function publicAuth() {

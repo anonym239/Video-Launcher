@@ -49,8 +49,10 @@ export default async function shorts({ node, params, signal }) {
         <img class="short-poster" src="https://i.ytimg.com/vi/${id}/oar2.jpg" data-fallback="https://i.ytimg.com/vi/${id}/hq2.jpg" alt="" loading="lazy">
         <div class="short-video-slot"></div>
         <div class="short-top">
-          <button class="icon-btn short-playpause" aria-label="Wiedergabe">${raw(icon('pause'))}</button>
-          <button class="icon-btn short-mute" aria-label="Ton">${raw(icon(video.muted ? 'volumeOff' : 'volume'))}</button>
+          <button class="short-round short-playpause" aria-label="Wiedergabe">${raw(icon('pause'))}</button>
+          <button class="short-round short-mute" aria-label="Ton">${raw(icon(video.muted ? 'volumeOff' : 'volume'))}</button>
+          <span class="short-top-spacer"></span>
+          <button class="short-round short-search" aria-label="Suchen">${raw(icon('search'))}</button>
         </div>
         <div class="short-paused-icon">${raw(icon('play'))}</div>
         <div class="short-bottom">
@@ -60,11 +62,11 @@ export default async function shorts({ node, params, signal }) {
         <div class="short-progress"><div></div></div>
       </div>
       <div class="short-actions">
-        <button class="short-act like" aria-label="Mag ich">${raw(icon('likeFilled'))}<span class="like-count">Mag ich</span></button>
-        <button class="short-act dislike" aria-label="Mag ich nicht">${raw(icon('dislikeFilled'))}<span>Mag ich nicht</span></button>
-        <button class="short-act comments" aria-label="Kommentare">${raw(icon('comment'))}<span class="comment-count">Kommentare</span></button>
-        <button class="short-act share" aria-label="Teilen">${raw(icon('share'))}<span>Teilen</span></button>
-        <button class="short-act more" aria-label="Mehr">${raw(icon('moreH'))}</button>
+        <button class="short-act like" aria-label="Mag ich"><span class="sa-icon">${raw(icon('like'))}</span><span class="like-count">Mag ich</span></button>
+        <button class="short-act dislike" aria-label="Mag ich nicht"><span class="sa-icon">${raw(icon('dislike'))}</span><span>Mag ich nicht</span></button>
+        <button class="short-act comments" aria-label="Kommentare"><span class="sa-icon">${raw(icon('comment'))}</span><span class="comment-count">Kommentare</span></button>
+        <button class="short-act share" aria-label="Teilen"><span class="sa-icon">${raw(icon('share'))}</span><span>Teilen</span></button>
+        <button class="short-act more" aria-label="Mehr"><span class="sa-icon">${raw(icon('moreH'))}</span></button>
         <a class="short-act ch-thumb" aria-label="Kanal"></a>
       </div>
     </section>`);
@@ -95,6 +97,7 @@ export default async function shorts({ node, params, signal }) {
     if (m.comments) slide.querySelector('.comment-count').textContent = m.comments;
     slide.querySelector('.like').classList.toggle('on', !!m.liked);
     slide.querySelector('.dislike').classList.toggle('on', !!m.disliked);
+    slide._paintRating?.();
     const thumb = slide.querySelector('.ch-thumb');
     thumb.href = `/channel/${m.channel.id}`;
     thumb.innerHTML = String(avatar(m.channel.avatar, 40, m.channel.name));
@@ -108,6 +111,10 @@ export default async function shorts({ node, params, signal }) {
       if (video.paused) video.play().catch(() => {});
       else video.pause();
     });
+    slide.querySelector('.short-search').onclick = () => {
+      document.body.classList.add('mobile-search');
+      document.getElementById('search-input').focus();
+    };
     slide.querySelector('.short-playpause').onclick = () => (video.paused ? video.play().catch(() => {}) : video.pause());
     slide.querySelector('.short-mute').onclick = () => {
       video.muted = !video.muted;
@@ -116,6 +123,12 @@ export default async function shorts({ node, params, signal }) {
     };
     const likeBtn = slide.querySelector('.like');
     const dislikeBtn = slide.querySelector('.dislike');
+    // Aktiv = gefülltes Symbol (wie in der App).
+    const paintRating = () => {
+      likeBtn.querySelector('.sa-icon').innerHTML = icon(likeBtn.classList.contains('on') ? 'likeFilled' : 'like');
+      dislikeBtn.querySelector('.sa-icon').innerHTML = icon(dislikeBtn.classList.contains('on') ? 'dislikeFilled' : 'dislike');
+    };
+    slide._paintRating = paintRating;
     const rate = async (r) => {
       const m = slide._meta || { title: '' };
       const v = { id, title: m.title, thumbnail: `https://i.ytimg.com/vi/${id}/oar2.jpg`, channel: m.channel, short: true };
@@ -123,6 +136,7 @@ export default async function shorts({ node, params, signal }) {
       const prevDis = dislikeBtn.classList.contains('on');
       likeBtn.classList.toggle('on', r === 'like');
       dislikeBtn.classList.toggle('on', r === 'dislike');
+      paintRating();
       try {
         await api('/api/rate', { method: 'POST', body: { id, rating: r, video: v } });
         if (m.likes != null) {
@@ -133,6 +147,7 @@ export default async function shorts({ node, params, signal }) {
       } catch (e) {
         likeBtn.classList.toggle('on', prevLike);
         dislikeBtn.classList.toggle('on', prevDis);
+        paintRating();
         toast(e.message);
       }
     };

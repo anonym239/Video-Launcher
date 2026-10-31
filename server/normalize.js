@@ -525,3 +525,49 @@ export function normalizeComment(thread) {
     hasReplies: !!thread?.has_replies
   };
 }
+
+// ---- TV-Oberfläche (Anmeldung über den Geräte-Code) --------------------------------
+// youtubei.js kennt die TV-Kacheln (tileRenderer) nicht – daher direkt aus dem rohen JSON.
+const rawText = (t) => (t ? t.simpleText || (t.runs || []).map((r) => r.text).join('') || '' : '');
+
+export function itemsFromTvRaw(root) {
+  const out = [];
+  const ids = new Set();
+  const seen = new WeakSet();
+  const walk = (n) => {
+    if (!n || typeof n !== 'object' || seen.has(n)) return;
+    seen.add(n);
+    if (Array.isArray(n)) return n.forEach(walk);
+    const t = n.tileRenderer;
+    if (t) {
+      const type = t.contentType || '';
+      const id = t.contentId || t.onSelectCommand?.watchEndpoint?.videoId || t.onSelectCommand?.reelWatchEndpoint?.videoId || '';
+      const meta = t.metadata?.tileMetadataRenderer || {};
+      const lines = (meta.lines || []).map((l) => (l.lineRenderer?.items || []).map((i) => rawText(i.lineItemRenderer?.text)).filter((x) => x && x.trim() !== '•'));
+      const header = t.header?.tileHeaderRenderer || {};
+      const thumbs = header.thumbnail?.thumbnails || [];
+      let duration = '';
+      for (const o of header.thumbnailOverlays || []) {
+        const s = o.thumbnailOverlayTimeStatusRenderer;
+        if (s) duration = rawText(s.text);
+      }
+      if (id && !ids.has(id) && /VIDEO|SHORT/.test(type)) {
+        ids.add(id);
+        const short = /SHORT/.test(type);
+        const flat = lines.flat();
+        out.push(short
+          ? { type: 'short', id, title: rawText(meta.title), thumbnail: fixUrl(thumbs.slice(-1)[0]?.url) || videoThumb(id, 'oar2'), views: flat.find((x) => /\d/.test(x)) || '' }
+          : {
+              type: 'video', id, title: rawText(meta.title), thumbnail: videoThumb(id),
+              duration: /^\d+(:\d{2}){1,2}$/.test(duration) ? duration : '', durationSec: parseDuration(duration),
+              views: flat.find((x) => /aufruf|view/i.test(x)) || '', published: flat.find((x) => /vor |ago|\d{4}/i.test(x) && !/aufruf|view/i.test(x)) || '',
+              live: /live/i.test(duration), upcoming: false, channel: lines[0]?.[0] ? { id: '', name: lines[0][0], avatar: '' } : null, description: ''
+            });
+      }
+      return;
+    }
+    for (const v of Object.values(n)) walk(v);
+  };
+  walk(root);
+  return out;
+}

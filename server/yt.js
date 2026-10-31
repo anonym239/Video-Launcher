@@ -4,7 +4,6 @@ import './polyfills.js';
 import path from 'node:path';
 import { Innertube, UniversalCache } from 'youtubei.js';
 import { DATA_DIR, auth, store } from './store.js';
-import { thumb, txt, unwrap } from './normalize.js';
 import { installEvaluator } from './jsruntime.js';
 
 installEvaluator();
@@ -85,39 +84,67 @@ async function create() {
   return inst;
 }
 
-async function loadAccount(inst) {
-  try {
-    const info = await inst.account.getInfo();
-    const page = info.page;
-    const header = findNode(page, 'ActiveAccountHeader') || findNode(page, 'AccountItem');
-    if (header) {
-      authState.account = {
-        name: txt(header.account_name),
-        handle: txt(header.channel_handle),
-        photo: thumb(header.account_photo, 176),
-        channelId: header.endpoint?.payload?.browseId || ''
-      };
-    } else {
-      authState.account = { name: 'Google-Konto', handle: '', photo: '', channelId: '' };
+// Sucht im rohen InnerTube-JSON nach Kontodaten (Name, Bild, Handle, Kanal).
+// Die Antworten unterscheiden sich je nach Client (WEB/TV), deshalb generisch.
+export function extractAccount(root) {
+  const found = [];
+  let channelId = '';
+  const text = (t) => (t ? t.simpleText || (t.runs || []).map((r) => r.text).join('') || t.content || '' : '');
+  const seen = new WeakSet();
+  const walk = (n) => {
+    if (!n || typeof n !== 'object' || seen.has(n)) return;
+    seen.add(n);
+    if (Array.isArray(n)) return n.forEach(walk);
+    if (n.accountName && (n.accountPhoto || n.channelHandle)) {
+      found.push({
+        name: text(n.accountName),
+        handle: text(n.channelHandle) || text(n.accountByline),
+        photo: (n.accountPhoto?.thumbnails || []).slice(-1)[0]?.url || '',
+        selected: n.isSelected !== false,
+        channelId: n.serviceEndpoint?.selectActiveIdentityEndpoint?.supportedTokens?.find?.((t) => t.pageIdToken)?.pageIdToken?.pageId || ''
+      });
     }
-  } catch (e) {
-    console.warn('[auth] Kontoinfo nicht abrufbar:', e.message);
-    authState.account = authState.account || { name: 'Google-Konto', handle: '', photo: '', channelId: '' };
+    const bid = n.browseEndpoint?.browseId;
+    if (!channelId && typeof bid === 'string' && /^UC[\w-]{22}$/.test(bid)) channelId = bid;
+    for (const v of Object.values(n)) walk(v);
+  };
+  walk(root);
+  const acc = found.find((a) => a.selected && a.name) || found.find((a) => a.name);
+  if (!acc) return null;
+  let photo = acc.photo;
+  if (photo.startsWith('//')) photo = 'https:' + photo;
+  // Größeres Profilbild anfordern (=s88 → =s176).
+  photo = photo.replace(/=s\d+(-[^/]*)?$/, '=s176$1');
+  return { name: acc.name, handle: acc.handle, photo, channelId: channelId || '' };
+}
+
+async function loadAccount(inst) {
+  const sources = [
+    () => inst.actions.execute('/account/account_menu', { client: 'WEB', parse: false }),
+    () => inst.actions.execute('/account/accounts_list', { client: 'TV', parse: false }),
+    () => inst.actions.execute('/account/accounts_list', { client: 'WEB', parse: false, requestType: 'ACCOUNTS_LIST_REQUEST_TYPE_CHANNEL_SWITCHER', callCircumstance: 'SWITCHING_USERS_FULL' })
+  ];
+  let account = null;
+  for (const src of sources) {
+    try {
+      const res = await src();
+      account = extractAccount(res?.data ?? res);
+      if (account) break;
+    } catch (e) {
+      console.warn('[auth] Kontoinfo-Quelle fehlgeschlagen:', e.message);
+    }
   }
+  // Kanal-ID fehlt? Über das Hauptmenü des Kontos nachschlagen.
+  if (account && !account.channelId) {
+    try {
+      const res = await inst.actions.execute('/browse', { browseId: 'SPaccount_overview', client: 'WEB', parse: false });
+      account.channelId = extractAccount(res?.data)?.channelId || '';
+    } catch {}
+  }
+  authState.account = account || authState.account || { name: 'Google-Konto', handle: '', photo: '', channelId: '' };
   notify();
 }
 
-function findNode(root, type, seen = new WeakSet()) {
-  root = unwrap(root);
-  if (!root || typeof root !== 'object' || seen.has(root)) return null;
-  seen.add(root);
-  if (root.type === type) return root;
-  for (const v of Array.isArray(root) ? root : Object.values(root)) {
-    const r = findNode(v, type, seen);
-    if (r) return r;
-  }
-  return null;
-}
 
 export function getYT() {
   if (!current) {

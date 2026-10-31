@@ -58,7 +58,18 @@ function buildMasthead() {
   setupVoice();
 }
 
+// "Du" in der Navigation zeigt nach der Anmeldung das Profilbild (wie in der App).
+function updateYouNav() {
+  const acc = state.auth.account;
+  document.querySelectorAll('.pivot-item[data-name="you"], .mini-item[data-name="you"]').forEach((a) => {
+    const label = a.querySelector('span:last-child')?.textContent || 'Du';
+    if (signedIn() && acc?.photo) a.innerHTML = `${avatar(acc.photo, 26, acc.name)}<span>${label}</span>`;
+    else a.innerHTML = `${icon('library', 'base-icon')}${icon('libraryFilled', 'when-active')}<span>${label}</span>`;
+  });
+}
+
 function renderAccountButton() {
+  updateYouNav();
   const b = $('#account-btn');
   const acc = state.auth.account;
   if (signedIn()) {

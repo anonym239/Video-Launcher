@@ -121,3 +121,26 @@ test('HLS-Playlists werden auf den Proxy umgeschrieben', () => {
   assert.equal(lines[2], '/vp?u=' + encodeURIComponent('https://manifest.googlevideo.com/api/manifest/hls_playlist/a/seg1.ts'));
   assert.equal(lines[3], '/vp?u=' + encodeURIComponent('https://rr1.googlevideo.com/seg2.ts'));
 });
+
+test('TV-Kacheln (Anmeldung per Geräte-Code) werden gelesen', async () => {
+  const { itemsFromTvRaw } = await import('../server/normalize.js');
+  const tile = (id, type, title, lines, duration) => ({ tileRenderer: {
+    contentId: id, contentType: type,
+    header: { tileHeaderRenderer: { thumbnail: { thumbnails: [{ url: `https://i.ytimg.com/vi/${id}/hqdefault.jpg` }] }, thumbnailOverlays: duration ? [{ thumbnailOverlayTimeStatusRenderer: { text: { simpleText: duration } } }] : [] } },
+    metadata: { tileMetadataRenderer: { title: { simpleText: title }, lines: lines.map((l) => ({ lineRenderer: { items: l.map((t) => ({ lineItemRenderer: { text: { simpleText: t } } })) } })) } }
+  } });
+  const raw = { contents: { tvBrowseRenderer: { content: { tvSurfaceContentRenderer: { content: { gridRenderer: { items: [
+    tile('aaaaaaaaaaa', 'TILE_CONTENT_TYPE_VIDEO', 'Erstes Video', [['Kanal A'], ['1.234 Aufrufe', '•', 'vor 2 Tagen']], '12:34'),
+    tile('bbbbbbbbbbb', 'TILE_CONTENT_TYPE_SHORTS', 'Ein Short', [['5 Mio. Aufrufe']]),
+    tile('UCxxxxxxxxxxxxxxxxxxxxxx', 'TILE_CONTENT_TYPE_CHANNEL', 'Kanal', [])
+  ] } } } } } } };
+  const items = itemsFromTvRaw(raw);
+  assert.equal(items.length, 2);
+  assert.equal(items[0].type, 'video');
+  assert.equal(items[0].title, 'Erstes Video');
+  assert.equal(items[0].duration, '12:34');
+  assert.equal(items[0].views, '1.234 Aufrufe');
+  assert.equal(items[0].published, 'vor 2 Tagen');
+  assert.equal(items[0].channel.name, 'Kanal A');
+  assert.equal(items[1].type, 'short');
+});
