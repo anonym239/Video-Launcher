@@ -1,5 +1,5 @@
 import { api, el, html, raw } from '../util.js';
-import { icon, CUSTOMIZABLE, sanitizeSvg, setCustomIcons } from '../icons.js';
+import { icon, CUSTOMIZABLE, sanitizeSvg, setCustomIcons, imageToSvg } from '../icons.js';
 import { avatar, toast, openDialog } from '../components.js';
 import { state, saveSettings, signedIn, setAuth, unblockChannel } from '../state.js';
 import { loginDialog } from '../app.js';
@@ -55,7 +55,7 @@ export default async function settings({ node }) {
     <section class="settings-card custom-icons">
       <h2>Eigene Symbole</h2>
       <label class="setting"><span>Name oben links<small>Leer lassen für „Video Launcher“. Bleibt nur auf diesem Gerät.</small></span><input class="brand-input" maxlength="30" placeholder="Video Launcher" value="${s.brandName || ''}"></label>
-      <p class="muted small">Hier kannst du einzelne Symbole durch eigene SVG-Dateien ersetzen (z. B. Logo oder Shorts). Die Dateien bleiben nur auf diesem Gerät.</p>
+      <p class="muted small">Hier kannst du einzelne Symbole durch eigene Bilder ersetzen – z. B. einen Ausschnitt aus einem Screenshot (PNG/JPG) oder eine SVG-Datei. Die Bilder bleiben nur auf diesem Gerät.</p>
       <div class="ci-list"></div>
     </section>
 
@@ -165,14 +165,15 @@ async function renderCustomIcons(box) {
     const row = el(html`<div class="ci-row">
       <span class="ci-preview">${raw(icon(name))}</span>
       <span class="ci-label">${label}${current[name] ? html`<small class="muted">eigene Datei</small>` : ''}</span>
-      <label class="btn btn-tonal small">Datei wählen<input type="file" accept=".svg,image/svg+xml" hidden></label>
+      <label class="btn btn-tonal small">Bild wählen<input type="file" accept="image/*,.svg" hidden></label>
       ${current[name] ? html`<button class="btn btn-text small ci-reset">Zurücksetzen</button>` : ''}
     </div>`);
     row.querySelector('input').onchange = async (e) => {
       const f = e.target.files?.[0];
       if (!f) return;
       try {
-        const svg = sanitizeSvg(await f.text());
+        const isSvg = /svg/i.test(f.type) || /\.svg$/i.test(f.name);
+        const svg = isSvg ? sanitizeSvg(await f.text()) : await imageToSvg(f);
         setCustomIcons(await api('/api/custom-icons', { method: 'POST', body: { name, svg } }));
         location.reload();
       } catch (err) {

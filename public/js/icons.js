@@ -170,6 +170,32 @@ export function sanitizeSvg(text) {
   return new XMLSerializer().serializeToString(svg);
 }
 
+/** Bild (PNG/JPG/WebP, z. B. Ausschnitt aus einem Screenshot) → kleines SVG mit eingebettetem Bild. */
+export async function imageToSvg(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, fail) => {
+      const i = new Image();
+      i.onload = () => ok(i);
+      i.onerror = () => fail(new Error('Bild konnte nicht gelesen werden'));
+      i.src = url;
+    });
+    const size = 96;
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    // Seitenverhältnis behalten, mittig einpassen.
+    const k = Math.min(size / img.width, size / img.height);
+    const w = img.width * k;
+    const h = img.height * k;
+    ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+    const data = c.toDataURL('image/png');
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><image href="${data}" x="0" y="0" width="24" height="24"/></svg>`;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export const CUSTOMIZABLE = {
   logo: 'Logo oben links',
   shorts: 'Shorts (Leiste)',

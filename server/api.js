@@ -232,7 +232,9 @@ export const routes = {
     const name = String(body.name || '');
     const svg = String(body.svg || '');
     if (!/^[a-zA-Z]{2,30}$/.test(name)) throw httpError(400, 'Ungültiger Symbolname');
-    if (!/^<svg[\s>]/.test(svg) || svg.length > 60000 || /<script|javascript:|\son\w+=/i.test(svg)) throw httpError(400, 'Ungültige SVG-Datei');
+    if (!/^<svg[\s>]/.test(svg) || svg.length > 120000 || /<script|javascript:|\son\w+=/i.test(svg)) throw httpError(400, 'Ungültige SVG-Datei');
+    // Eingebettete Bilder nur als data:image (keine externen Adressen).
+    for (const m of svg.matchAll(/href="([^"]*)"/g)) if (!/^(#|data:image\/(png|jpeg|webp);base64,)/.test(m[1])) throw httpError(400, 'Ungültige SVG-Datei');
     customIcons.data[name] = svg;
     customIcons.flush();
     return customIcons.data;
