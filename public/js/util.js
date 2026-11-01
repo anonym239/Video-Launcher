@@ -127,6 +127,30 @@ export class ApiError extends Error {
   }
 }
 
+// Server vorwärmen: die ersten Videos einer Liste schon auflösen lassen,
+// damit sie beim Antippen sofort starten (wie in der App).
+const warmed = new Set();
+export function warmUp(items, max = 4) {
+  const ids = [];
+  const shorts = [];
+  const visit = (list) => {
+    for (const it of list || []) {
+      if (ids.length >= max) return;
+      if (it?.type === 'shelf') visit(it.items?.slice(0, 2));
+      else if ((it?.type === 'video' || it?.type === 'short') && it.id && !it.live && !warmed.has(it.id)) {
+        warmed.add(it.id);
+        ids.push(it.id);
+        if (it.type === 'short' || it.short) shorts.push(it.id);
+      }
+    }
+  };
+  visit(items);
+  if (!ids.length) return;
+  const go = () => api('/api/warm', { method: 'POST', body: { ids, shorts } }).catch(() => {});
+  if ('requestIdleCallback' in window) requestIdleCallback(go, { timeout: 800 });
+  else setTimeout(go, 200);
+}
+
 // Vorab gestartete Anfragen (z. B. beim Antippen eines Videos), die api() wiederverwendet.
 const prefetched = new Map(); // path -> { at, promise }
 export function prefetch(path) {

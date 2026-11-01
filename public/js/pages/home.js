@@ -1,4 +1,4 @@
-import { api, el, qs } from '../util.js';
+import { api, el, qs, warmUp } from '../util.js';
 import { icon } from '../icons.js';
 import { appendItems, infinite, skeletonGrid, chipBar, emptyState } from '../components.js';
 
@@ -39,6 +39,7 @@ export default async function home({ node, signal }) {
       return;
     }
     appendItems(grid, data.items, 'grid');
+    warmUp(data.items, 4);
     let cont = data.cont;
     if (cont) {
       scroller = infinite(grid, async () => {

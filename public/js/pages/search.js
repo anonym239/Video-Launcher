@@ -1,4 +1,4 @@
-import { api, el, html, raw, qs } from '../util.js';
+import { api, el, html, raw, qs, warmUp } from '../util.js';
 import { icon } from '../icons.js';
 import { appendItems, infinite, skeletonGrid, emptyState, chipBar, closeOverlay, openDialog } from '../components.js';
 import { go } from '../router.js';
@@ -54,6 +54,7 @@ export default async function search({ node, query, signal }) {
     return;
   }
   appendItems(list, data.items, 'list');
+  warmUp(data.items, 3);
   let cont = data.cont;
   if (cont) {
     infinite(list, async () => {

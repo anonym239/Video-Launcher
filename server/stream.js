@@ -3,7 +3,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { Constants } from 'youtubei.js';
-import { getYT } from './yt.js';
+import { getYT, getStreamYT, isSignedIn } from './yt.js';
 import { store } from './store.js';
 import { thumb, txt } from './normalize.js';
 
@@ -136,10 +136,27 @@ export function raceStaggered(tasks, delay) {
 }
 
 async function viaYoutubei(id) {
-  const yt = await getYT();
   const clients = store.settings.clients?.length ? store.settings.clients : ['ANDROID_VR', 'TV', 'IOS', 'WEB'];
+  // Zuerst ohne Anmeldung (schnell & zuverlässig), danach mit Anmeldung.
+  const sessions = [() => getStreamYT()];
+  if (isSignedIn()) sessions.push(() => getYT());
+  const tasks = [];
+  sessions.forEach((get, si) => {
+    for (const c of clients) {
+      tasks.push(async () => {
+        const yt = await get();
+        try {
+          return { ...(await tryClient(yt, id, c)), yt };
+        } catch (e) {
+          // „Privat“ ohne Anmeldung heißt nicht „privat“ für dein Konto.
+          if (si === 0 && sessions.length > 1) e.fatal = false;
+          throw e;
+        }
+      });
+    }
+  });
   try {
-    return await raceStaggered(clients.map((c) => () => tryClient(yt, id, c)), STAGGER_MS);
+    return await raceStaggered(tasks, STAGGER_MS);
   } catch (e) {
     const err = new Error(e?.message || 'Video nicht verfügbar');
     err.status = 403;
@@ -205,7 +222,7 @@ function qualityLabel(f) {
 export async function streamsFor(id) {
   const r = await resolveVideo(id);
   if (r.source === 'yt-dlp') return streamsFromYtdlp(id, r);
-  const yt = await getYT();
+  const yt = r.yt || (await getYT());
   const { info } = r;
   const sd = info.streaming_data;
   const basic = info.basic_info || {};
@@ -389,7 +406,7 @@ export async function freshUrlFor(vid, oldUrl) {
   const f = cands.find((x) => (x.xtags || '') === xtags) || cands.find((x) => (x.url || '').includes(xtags)) || cands[0];
   if (!f) return null;
   try {
-    const yt = await getYT();
+    const yt = r.yt || (await getYT());
     const url = await f.decipher(yt.session.player);
     if (!url) return null;
     remap.set(key, { url, at: Date.now() });
@@ -533,7 +550,7 @@ export async function openDownload(id, { v, a, signal }) {
   const { muxMp4, fetchChunks } = await import('./mux.js');
   const r = await resolveVideo(id);
   if (r.source !== 'youtubei') throw Object.assign(new Error('Für dieses Video ist nur der einfache Download verfügbar.'), { status: 400 });
-  const yt = await getYT();
+  const yt = r.yt || (await getYT());
   const formats = r.info.streaming_data?.adaptive_formats || [];
   const find = (itag) => formats.find((f) => String(f.itag) === String(itag));
   const vf = v ? find(v) : null;

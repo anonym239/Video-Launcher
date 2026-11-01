@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { routes, httpError, warmHome } from './api.js';
 import { proxy, download } from './stream.js';
 import { serveOffline } from './offline.js';
-import { getYT } from './yt.js';
+import { getYT, getStreamYT } from './yt.js';
 import { store } from './store.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -212,6 +212,7 @@ if (isMain) {
     if (LAN) for (const ip of lanAddresses()) console.log(`    Im WLAN:           http://${ip}:${PORT}`);
     console.log('    Beenden mit Strg+C\n');
     // Sitzung schon vorab aufbauen, damit die erste Seite schneller lädt.
+    getStreamYT().catch(() => {}); // Stream-Sitzung parallel vorbereiten
     getYT()
       .then(() => warmHome())
       .catch((e) => console.warn('[yt] Sitzung konnte nicht erstellt werden:', e.message));

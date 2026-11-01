@@ -1,5 +1,5 @@
 // Wiedergabeseite: Player, Infos, Beschreibung, Kommentare, ähnliche Videos, Playlist.
-import { api, el, html, raw, qs, compact, formatTime, parseTimeParam, $ } from '../util.js';
+import { api, el, html, raw, qs, compact, formatTime, parseTimeParam, $, warmUp } from '../util.js';
 import { icon } from '../icons.js';
 import { avatar, appendItems, infinite, subscribeButton, toast, openMenu, openDialog, saveDialog, shareDialog, downloadDialog, addToQueue, isMobile } from '../components.js';
 import { player } from '../player.js';
@@ -319,6 +319,7 @@ function renderRelated(node, data, signal) {
 
   const variant = () => (mq.matches ? 'grid' : 'compact');
   appendItems(list, data.related, variant());
+  warmUp(data.related, 2); // „Nächstes Video“ startet dann sofort
   let cont = data.relatedCont;
   if (cont) {
     infinite(list, async () => {

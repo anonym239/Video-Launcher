@@ -172,9 +172,25 @@ export function getYT() {
   return current;
 }
 
+// Zweite Sitzung OHNE Anmeldung – nur für Video-Streams und Downloads.
+// Mit Login-Cookies lehnen die schnellen App-Clients (ANDROID_VR, iOS …) Anfragen
+// oft ab oder liefern Links, die beim Laden scheitern. Streams brauchen keinen
+// Login; die angemeldete Sitzung dient nur als Rückfall (z. B. Altersfreigabe).
+let anon = null;
+export function getStreamYT() {
+  if (!anon) {
+    anon = Innertube.create(baseOptions()).catch((e) => {
+      anon = null;
+      throw e;
+    });
+  }
+  return anon;
+}
+
 // Nach Änderungen an Sprache/Region/Login die Sitzung neu aufbauen.
 export function resetYT() {
   current = null;
+  anon = null;
   return getYT();
 }
 

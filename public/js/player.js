@@ -155,7 +155,9 @@ export class Player {
           p.configure({
             streaming: {
               bufferingGoal: 30,
-              rebufferingGoal: 0.6,
+              // Sofort losspielen, sobald ein kleines Stück da ist; Segmente parallel vorladen.
+              rebufferingGoal: 0.3,
+              segmentPrefetchLimit: 2,
               bufferBehind: 20,
               // Großzügige Zeitlimits: Über den Handy-Proxy dauern Segmente manchmal länger.
               // Ein hängender Abruf wird nach 10 s ohne Daten neu gestartet statt das
@@ -163,7 +165,7 @@ export class Player {
               retryParameters: { maxAttempts: 8, baseDelay: 400, backoffFactor: 1.6, timeout: 60000, stallTimeout: 10000, connectionTimeout: 15000 }
             },
             manifest: { dash: { ignoreMinBufferTime: true }, retryParameters: { maxAttempts: 4, baseDelay: 500, backoffFactor: 2, timeout: 30000 } },
-            abr: { enabled: true, defaultBandwidthEstimate: 3_000_000 },
+            abr: { enabled: true, defaultBandwidthEstimate: 3_000_000, switchInterval: 2 },
             preferredAudioLanguage: state.settings.lang || 'de',
             preferredVariantRole: 'main'
           });

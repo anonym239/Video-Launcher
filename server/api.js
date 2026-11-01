@@ -213,6 +213,19 @@ export const routes = {
     return streamsFor(id);
   },
 
+  // Vorwärmen: Die ersten Videos einer Liste schon im Hintergrund auflösen, damit
+  // Antippen sofort abspielt (Stream-Links + Video-Infos liegen dann bereit).
+  'POST /api/warm': async (q, p, body) => {
+    const ids = (Array.isArray(body.ids) ? body.ids : []).filter((i) => /^[\w-]{11}$/.test(i)).slice(0, 6);
+    const shorts = new Set((Array.isArray(body.shorts) ? body.shorts : []).filter((i) => ids.includes(i)));
+    (async () => {
+      for (const id of ids) {
+        await Promise.allSettled([resolveVideo(id), shorts.has(id) ? shortMeta(id) : cachedVideo(id)]);
+      }
+    })().catch(() => {});
+    return { ok: true };
+  },
+
   // ---- Eigene Symbole (nur auf diesem Gerät) ----------------------------------
   'GET /api/custom-icons': async () => customIcons.data,
   'POST /api/custom-icons': async (q, p, body) => {

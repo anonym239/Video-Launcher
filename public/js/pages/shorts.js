@@ -207,9 +207,9 @@ export default async function shorts({ node, params, signal }) {
     return streamCache.get(id);
   };
   const SHAKA_CONFIG = {
-    streaming: { bufferingGoal: 12, rebufferingGoal: 0.4, bufferBehind: 10 },
+    streaming: { bufferingGoal: 12, rebufferingGoal: 0.25, bufferBehind: 10, segmentPrefetchLimit: 2 },
     manifest: { dash: { ignoreMinBufferTime: true } },
-    abr: { defaultBandwidthEstimate: 2_500_000 }
+    abr: { defaultBandwidthEstimate: 2_500_000, switchInterval: 2 }
   };
 
   async function ensureShaka() {
