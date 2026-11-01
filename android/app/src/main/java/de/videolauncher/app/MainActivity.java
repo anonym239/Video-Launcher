@@ -55,9 +55,7 @@ public class MainActivity extends Activity {
         w.setStatusBarColor(Color.parseColor("#0f0f0f"));
         w.setNavigationBarColor(Color.parseColor("#0f0f0f"));
 
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
-        }
+        askNotificationsOnce();
         installCrashLogger();
         startServer();
 
@@ -75,6 +73,37 @@ public class MainActivity extends Activity {
         pendingPath = pathFromIntent(getIntent());
         if (savedInstanceState != null) web.restoreState(savedInstanceState);
         waitForServer();
+    }
+
+    private static final int REQ_NOTIFICATIONS = 1;
+    private static final String PREFS = "vl";
+    private static final String KEY_NOTIF_ASKED = "notificationsAsked";
+
+    /**
+     * Fragt nur ein einziges Mal nach der Erlaubnis für Benachrichtigungen.
+     * Die Antwort (auch „Nicht zulassen“) wird gespeichert – danach fragt die
+     * App nie wieder, auch nicht nach Neustart, Drehen oder Bild-im-Bild.
+     * Ändern lässt es sich jederzeit in den Android-Einstellungen der App.
+     */
+    private void askNotificationsOnce() {
+        if (Build.VERSION.SDK_INT < 33) return;
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return;
+        android.content.SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        if (prefs.getBoolean(KEY_NOTIF_ASKED, false)) return;
+        // Sofort merken – auch wenn der Dialog weggewischt oder die App beendet wird.
+        prefs.edit().putBoolean(KEY_NOTIF_ASKED, true).apply();
+        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFICATIONS);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_NOTIFICATIONS) {
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putBoolean(KEY_NOTIF_ASKED, true)
+                    .putBoolean("notificationsAllowed", grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED)
+                    .apply();
+        }
     }
 
     /** Startet den Server-Dienst (eigener Prozess ":node"). */
