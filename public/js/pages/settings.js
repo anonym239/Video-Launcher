@@ -54,7 +54,7 @@ export default async function settings({ node }) {
 
     <section class="settings-card custom-icons">
       <h2>Eigene Symbole</h2>
-      <label class="setting"><span>Name oben links<small>Leer lassen für „Video Launcher“. Bleibt nur auf diesem Gerät.</small></span><input class="brand-input" maxlength="30" placeholder="Video Launcher" value="${s.brandName || ''}"></label>
+      <label class="setting"><span>Name oben links<small>Leer lassen für „YouTube“. Bleibt nur auf diesem Gerät.</small></span><input class="brand-input" maxlength="30" placeholder="YouTube" value="${s.brandName || ''}"></label>
       <p class="muted small">Hier kannst du einzelne Symbole durch eigene Bilder ersetzen – z. B. einen Ausschnitt aus einem Screenshot (PNG/JPG) oder eine SVG-Datei. Die Bilder bleiben nur auf diesem Gerät.</p>
       <div class="ci-list"></div>
     </section>

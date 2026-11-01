@@ -40,7 +40,7 @@ const LOGO = `<svg class="logo-svg" viewBox="0 0 24 24" aria-hidden="true"><circ
 // Name und Logo oben links – in den Einstellungen frei wählbar (bleibt auf dem Gerät).
 function applyBrand() {
   const logo = icon('logo', 'logo-svg') || LOGO;
-  const name = (state.settings?.brandName || '').trim() || 'Video Launcher';
+  const name = (state.settings?.brandName || '').trim() || 'YouTube';
   document.querySelectorAll('.logo-icon').forEach((n) => (n.innerHTML = logo));
   document.querySelectorAll('.logo-text').forEach((n) => (n.textContent = name));
 }

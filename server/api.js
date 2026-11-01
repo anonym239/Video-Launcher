@@ -937,7 +937,8 @@ async function computeHome(chip) {
   } catch {}
   let chips = feed ? FILTER_NAMES(feed) : [];
   if (feed && chip && chip !== chips[0]) feed = await feed.getFilteredFeed(chip);
-  let items = feed ? itemsFromFeed(feed) : [];
+  // Nachrichten-Regale nur, wenn der Chip „Nachrichten“ ausgewählt ist.
+  let items = feed ? itemsFromFeed(feed, { news: NEWS_QUERY.test(chip || '') }) : [];
   let cont = items.length && hasCont(feed) ? saveCont(feed, 'home') : null;
   // Angemeldet, aber die Web-Startseite ist leer (TV-Anmeldung) → TV-Startseite.
   if (isSignedIn() && !items.length) {

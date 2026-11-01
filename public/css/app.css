@@ -1483,3 +1483,8 @@ html, body { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; text-siz
 .pivot-label { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
 .pl-long { display: none; }
 @media (min-width: 520px) { .pl-long { display: block; } .pl-short { display: none; } }
+/* Logo oben links wie in der App: rotes Logo + schmaler, fetter Schriftzug. */
+.logo { gap: 3px; }
+.logo-svg { width: 30px; height: 30px; }
+.logo-text { font-weight: 700; letter-spacing: -1.2px; font-stretch: condensed; font-size: 21px; transform: scaleX(0.88); transform-origin: left center; }
+@media (max-width: 791px) { .logo-text { font-size: 20px; } }

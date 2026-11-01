@@ -114,16 +114,73 @@ const P = {
 
 // Eigene Zeichnungen und Marken-Symbole (viewBox 0 0 24 24).
 const OWN = {
+  // ---- Nach den Screenshots der YouTube-App nachgezeichnet (24×24) ----
+  home:
+    '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 10.6 12 4l8 6.6V20h-5v-5.5h-6V20H4z"/>',
+  homeFilled:
+    '<path fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" d="M3.5 10.4 12 3.4l8.5 7v10.1h-6v-6h-5v6h-6z"/>',
+  subs:
+    '<g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.6h8M5.6 6.6h12.8"/><rect x="3.5" y="9.4" width="17" height="11.1" rx="2"/></g><path fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" d="M10.3 12.3v5.5l4.5-2.75z"/>',
+  subsFilled:
+    '<path d="M8 3.6h8M5.6 6.6h12.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path fill="currentColor" fill-rule="evenodd" d="M5.5 9h13a2.5 2.5 0 0 1 2.5 2.5v6.6a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 18.1v-6.6A2.5 2.5 0 0 1 5.5 9zm4.8 3.3v5.5l4.5-2.75z"/>',
+  bell:
+    '<g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 16.8v-5.4a5.8 5.8 0 0 1 11.6 0v5.4l1.7 1.9h-15z"/><path d="M10 21a2.1 2.1 0 0 0 4 0"/></g>',
+  bellFilled:
+    '<path fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" d="M6.2 16.8v-5.4a5.8 5.8 0 0 1 11.6 0v5.4l1.7 1.9h-15z"/><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M10 21a2.1 2.1 0 0 0 4 0"/>',
+  shorts:
+    '<g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="7.2" width="11.2" height="14" rx="2.6"/><path d="M8.6 3.4h7.6a3.3 3.3 0 0 1 3.3 3.3v9.8"/><path d="M8.6 11v6.2l4.8-3.1z"/></g>',
+  shortsFilled:
+    '<path d="M8.6 3.4h7.6a3.3 3.3 0 0 1 3.3 3.3v9.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path fill="currentColor" fill-rule="evenodd" d="M7.1 6.4h6a3.4 3.4 0 0 1 3.4 3.4v8.8a3.4 3.4 0 0 1-3.4 3.4h-6a3.4 3.4 0 0 1-3.4-3.4V9.8a3.4 3.4 0 0 1 3.4-3.4zm1.5 4.6v6.2l4.8-3.1z"/>',
+  like:
+    '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M7.2 20.2V10.6l3.6-6.1c.5-.8 1.6-1 2.3-.4.6.5.8 1.3.6 2l-.9 3.6h5.1a2.2 2.2 0 0 1 2.1 2.7l-1.4 6.1a2.2 2.2 0 0 1-2.1 1.7zM7.2 10.6H5.1a1.6 1.6 0 0 0-1.6 1.6v6.4a1.6 1.6 0 0 0 1.6 1.6h2.1"/>',
+  likeFilled:
+    '<path fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" d="M7.2 20.2V10.6l3.6-6.1c.5-.8 1.6-1 2.3-.4.6.5.8 1.3.6 2l-.9 3.6h5.1a2.2 2.2 0 0 1 2.1 2.7l-1.4 6.1a2.2 2.2 0 0 1-2.1 1.7zM5.1 10.6h.9v9.6h-.9a1.6 1.6 0 0 1-1.6-1.6v-6.4a1.6 1.6 0 0 1 1.6-1.6z"/>',
+  bookmark:
+    '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6.5 4.8A1.3 1.3 0 0 1 7.8 3.5h8.4a1.3 1.3 0 0 1 1.3 1.3v15.7L12 16.2l-5.5 4.3z"/>',
+  bookmarkFilled:
+    '<path fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" d="M6.5 4.8A1.3 1.3 0 0 1 7.8 3.5h8.4a1.3 1.3 0 0 1 1.3 1.3v15.7L12 16.2l-5.5 4.3z"/>',
+  remix:
+    '<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.2 9.5A7.5 7.5 0 0 0 5.6 7.6M4.8 14.5a7.5 7.5 0 0 0 13.6 1.9"/><path d="M5.2 3.8v4h4M18.8 20.2v-4h-4M12 9v6M9 12h6"/></g>',
+  down:
+    '<path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M5.5 9l6.5 6.5L18.5 9"/>',
+  cc:
+    '<rect x="3" y="5" width="18" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" stroke-linecap="square" stroke-linejoin="miter" d="M10.6 10.2H8.1v3.6h2.5M16 10.2h-2.5v3.6H16"/>',
+  ccOn:
+    '<path fill="currentColor" fill-rule="evenodd" d="M5.5 4h13A2.5 2.5 0 0 1 21 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5v-11A2.5 2.5 0 0 1 5.5 4zm2.6 5.3h3.4v1.8H9.9v1.8h1.6v1.8H8.1zm5.4 0h3.4v1.8h-1.6v1.8h1.6v1.8h-3.4z"/>',
+  fullscreen:
+    '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-linecap="square" stroke-linejoin="miter" d="M4.5 9V4.5H9M15 4.5h4.5V9M19.5 15v4.5H15M9 19.5H4.5V15"/>',
+  fullscreenExit:
+    '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-linecap="square" stroke-linejoin="miter" d="M9 4.5V9H4.5M19.5 9H15V4.5M15 19.5V15h4.5M4.5 15H9v4.5"/>',
+  play:
+    '<path fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" stroke-width="1.6" d="M8 5.6v12.8l10.2-6.4z"/>',
+  pause:
+    '<path fill="currentColor" d="M6.5 5h3.6v14H6.5zM13.9 5h3.6v14h-3.6z"/>',
+  next:
+    '<path fill="currentColor" stroke="currentColor" stroke-linejoin="round" d="M5.8 6.2v11.6l8.6-5.8z"/><path fill="currentColor" d="M15.8 6h2.2v12h-2.2z"/>',
+  prev:
+    '<path fill="currentColor" stroke="currentColor" stroke-linejoin="round" d="M18.2 6.2v11.6L9.6 12z"/><path fill="currentColor" d="M6 6h2.2v12H6z"/>',
+  rotate:
+    '<g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2.8" width="9.6" height="17" rx="1.6"/><circle cx="16.5" cy="17.2" r="3.6" fill="#000"/><path d="M16.5 15.4v2l1.3.9"/></g>',
+  myVideos:
+    '<rect x="3.5" y="5" width="17" height="14" rx="1.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" d="M10 9.2v5.6l4.6-2.8z"/>',
+  movies:
+    '<rect x="3.5" y="5.5" width="17" height="13" rx="1.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3.5 10h17"/><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M6.5 7.2l1.2 1.1-1.2 1.1M10.5 7.2l1.2 1.1-1.2 1.1M14.5 7.2l1.2 1.1-1.2 1.1"/>',
+  watchtime:
+    '<rect x="4" y="4" width="16" height="16" rx="1.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 16.2v-4.5M12 16.2V8M15 16.2v-3"/>',
+  premium:
+    '<rect x="3" y="5.5" width="18" height="13" rx="4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" d="M10.2 9.4v5.2l4.4-2.6z"/>',
+  // Zahnrad dünn mit hohlem Kreis (wie im Player der App).
+  settings:
+    '<path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" d="M9.95 4.89 L10.09 2.59 L13.91 2.59 L14.05 4.89 L15.58 5.53 L17.30 4.00 L20.00 6.70 L18.47 8.42 L19.11 9.95 L21.41 10.09 L21.41 13.91 L19.11 14.05 L18.47 15.58 L20.00 17.30 L17.30 20.00 L15.58 18.47 L14.05 19.11 L13.91 21.41 L10.09 21.41 L9.95 19.11 L8.42 18.47 L6.70 20.00 L4.00 17.30 L5.53 15.58 L4.89 14.05 L2.59 13.91 L2.59 10.09 L4.89 9.95 L5.53 8.42 L4.00 6.70 L6.70 4.00 L8.42 5.53Z"/><circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.7"/>',
+  // YouTube-Logo oben links (Marke von Google LLC).
+  logo:
+    '<rect x="1" y="5" width="22" height="15.4" rx="4.6" fill="#ff0033"/><path fill="#fff" d="M9.8 9.2v7l6.1-3.5z"/>',
   // Nach den Screenshots der App: Sprechblase mit zwei Zeilen, dicker Teilen-Pfeil.
   comment:
     '<g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 3.5V17A2.5 2.5 0 0 1 4 14.5v-8A2.5 2.5 0 0 1 6.5 4z"/><path d="M8 9h8M8 12.5h5.5"/></g>',
   share:
     '<path d="M13.5 4.8v3.9C8.3 9.3 4.6 12.6 3.8 18.6c2.1-3 5.3-4.4 9.7-4.4v4l7-6.7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
-  // YouTube-Shorts-Logo (Pfad aus „Simple Icons“, CC0; die Marke gehört Google).
-  // Leiste: Umriss, ausgewählt gefüllt; Regal-Überschrift: rot mit weißem Play.
-  shorts:
-    '<path d="m18.931 9.99-1.441-.601 1.717-.913a4.48 4.48 0 0 0 1.874-6.078 4.506 4.506 0 0 0-6.09-1.874L4.792 5.929a4.504 4.504 0 0 0-2.402 4.193 4.521 4.521 0 0 0 2.666 3.904c.036.012 1.442.6 1.442.6l-1.706.901a4.51 4.51 0 0 0-2.369 3.967A4.528 4.528 0 0 0 6.93 24c.725 0 1.437-.174 2.08-.508l10.21-5.406a4.494 4.494 0 0 0 2.39-4.192 4.525 4.525 0 0 0-2.678-3.904ZM9.597 15.19V8.824l6.007 3.184z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" transform="translate(1.3 1.3) scale(0.89)"/>',
-  shortsFilled: '<path fill-rule="evenodd" d="m18.931 9.99-1.441-.601 1.717-.913a4.48 4.48 0 0 0 1.874-6.078 4.506 4.506 0 0 0-6.09-1.874L4.792 5.929a4.504 4.504 0 0 0-2.402 4.193 4.521 4.521 0 0 0 2.666 3.904c.036.012 1.442.6 1.442.6l-1.706.901a4.51 4.51 0 0 0-2.369 3.967A4.528 4.528 0 0 0 6.93 24c.725 0 1.437-.174 2.08-.508l10.21-5.406a4.494 4.494 0 0 0 2.39-4.192 4.525 4.525 0 0 0-2.678-3.904ZM9.597 15.19V8.824l6.007 3.184z" transform="translate(.6 .6) scale(.95)"/>',
+  // Rotes YouTube-Shorts-Logo für Regal-Überschriften (Simple Icons, CC0; Marke von Google LLC).
   shortsLogo: '<path fill="#ff0033" d="m18.931 9.99-1.441-.601 1.717-.913a4.48 4.48 0 0 0 1.874-6.078 4.506 4.506 0 0 0-6.09-1.874L4.792 5.929a4.504 4.504 0 0 0-2.402 4.193 4.521 4.521 0 0 0 2.666 3.904c.036.012 1.442.6 1.442.6l-1.706.901a4.51 4.51 0 0 0-2.369 3.967A4.528 4.528 0 0 0 6.93 24c.725 0 1.437-.174 2.08-.508l10.21-5.406a4.494 4.494 0 0 0 2.39-4.192 4.525 4.525 0 0 0-2.678-3.904Z"/><path fill="#fff" d="M9.597 15.19V8.824l6.007 3.184z"/>'
 };
 
