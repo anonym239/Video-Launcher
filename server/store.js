@@ -23,6 +23,7 @@ export const DEFAULT_SETTINGS = {
   restricted: false,
   historyPaused: false,
   saveToGallery: false,
+  brandName: '',
   clients: ['ANDROID_VR', 'TV', 'IOS', 'WEB_EMBEDDED', 'MWEB', 'WEB']
 };
 

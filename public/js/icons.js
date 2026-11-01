@@ -115,6 +115,11 @@ const P = {
 // Eigene Zeichnungen (viewBox 0 0 24 24) – bewusst KEIN Shorts-Logo (Marke),
 // sondern ein eigenes Symbol in derselben Strichstärke wie die übrigen Icons.
 const OWN = {
+  // Nach den Screenshots der App: Sprechblase mit zwei Zeilen, dicker Teilen-Pfeil.
+  comment:
+    '<g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 3.5V17A2.5 2.5 0 0 1 4 14.5v-8A2.5 2.5 0 0 1 6.5 4z"/><path d="M8 9h8M8 12.5h5.5"/></g>',
+  share:
+    '<path d="M13.5 4.8v3.9C8.3 9.3 4.6 12.6 3.8 18.6c2.1-3 5.3-4.4 9.7-4.4v4l7-6.7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
   shorts:
     '<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="6.5" width="11.5" height="15" rx="3"/><path d="M8.5 2.5h7.5a4 4 0 0 1 4 4v9.5"/></g><path d="M8.6 10.6v6.8l5.4-3.4z"/>',
   shortsFilled:
@@ -131,8 +136,60 @@ const ALIAS = { gear: 'settings' };
 
 const ATTR = 'aria-hidden="true" focusable="false"';
 
+// Eigene Symbole des Nutzers (Einstellungen → Eigene Symbole). Liegen nur auf dem
+// Gerät (nicht im Repository) und ersetzen das gleichnamige Symbol.
+let CUSTOM = {};
+try {
+  CUSTOM = JSON.parse(localStorage.getItem('vl:customIcons') || '{}') || {};
+} catch {}
+
+export function setCustomIcons(map) {
+  CUSTOM = map && typeof map === 'object' ? map : {};
+  try {
+    localStorage.setItem('vl:customIcons', JSON.stringify(CUSTOM));
+  } catch {}
+}
+
+/** Bereinigt eine SVG-Datei (keine Skripte, Ereignisse, externen Links). */
+export function sanitizeSvg(text) {
+  const doc = new DOMParser().parseFromString(String(text), 'image/svg+xml');
+  const svg = doc.documentElement;
+  if (!svg || svg.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) throw new Error('Keine gültige SVG-Datei');
+  doc.querySelectorAll('script, foreignObject, iframe, object, embed, style, image, use').forEach((n) => n.remove());
+  for (const n of [svg, ...svg.querySelectorAll('*')]) {
+    for (const a of [...n.attributes]) {
+      if (/^on/i.test(a.name) || (/href$/i.test(a.name) && !/^#/.test(a.value)) || /javascript:/i.test(a.value)) n.removeAttribute(a.name);
+    }
+  }
+  if (!svg.getAttribute('viewBox')) {
+    const w = parseFloat(svg.getAttribute('width')) || 24;
+    const h = parseFloat(svg.getAttribute('height')) || 24;
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  }
+  for (const a of ['width', 'height', 'class', 'id', 'style']) svg.removeAttribute(a);
+  return new XMLSerializer().serializeToString(svg);
+}
+
+export const CUSTOMIZABLE = {
+  logo: 'Logo oben links',
+  shorts: 'Shorts (Leiste)',
+  shortsFilled: 'Shorts (Leiste, ausgewählt / Regal)',
+  home: 'Startseite',
+  homeFilled: 'Startseite (ausgewählt)',
+  subs: 'Abos',
+  subsFilled: 'Abos (ausgewählt)',
+  bell: 'Benachrichtigungen',
+  bellFilled: 'Benachrichtigungen (ausgewählt)',
+  like: 'Mag ich',
+  dislike: 'Mag ich nicht',
+  comment: 'Kommentare',
+  share: 'Teilen',
+  bookmark: 'Speichern'
+};
+
 export function icon(name, cls = '') {
   name = ALIAS[name] || name;
+  if (CUSTOM[name]) return CUSTOM[name].replace(/^<svg\b/, `<svg class="icon icon-custom ${cls}" ${ATTR}`);
   if (OWN[name]) return `<svg class="icon ${cls}" viewBox="0 0 24 24" ${ATTR}>${OWN[name]}</svg>`;
   const d = P[name];
   if (!d) return '';

@@ -372,6 +372,9 @@ export function unwrap(node) {
 const SHELF_TYPES = new Set(['ReelShelf', 'RichShelf', 'Shelf', 'GridShelfView', 'HorizontalCardList']);
 
 // Läuft in Dokumentreihenfolge durch einen geparsten Baum und sammelt Inhaltselemente.
+const NEWS_SHELF = /eilmeldung|breaking news|top-?nachrichten|top news|nachrichten aus aller welt|aktuelle nachrichten|latest news/i;
+export const NEWS_QUERY = /nachricht|news|eilmeldung|tagesschau|aktuell/i;
+
 export function collectItems(root, opts = {}) {
   const out = [];
   const seen = new WeakSet();
@@ -402,6 +405,9 @@ export function collectItems(root, opts = {}) {
         walk(body, children, depth + 1);
         if (!children.length) return;
         const title = txt(node.title) || txt(node.header?.title) || '';
+        // „Eilmeldung“/„Top-Nachrichten“-Regale nie automatisch zeigen –
+        // nur wenn ausdrücklich nach Nachrichten gesucht wird (opts.news).
+        if (!opts.news && NEWS_SHELF.test(title)) return;
         const shorts = children.every((c) => c.type === 'short');
         arr.push({ type: 'shelf', title, shorts, items: children });
         return;

@@ -1442,3 +1442,38 @@ html, body { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; text-siz
   .shelf-shorts .short-menu { top: 4px; right: 0; bottom: auto; color: #fff; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6)); }
   .shelf-shorts .shorts-row { grid-auto-columns: calc((100% - 12px) / 2); gap: 12px; padding: 0 12px; }
 }
+/* Wiedergabeseite (Handy) wie in der YouTube-App: Profil + Abonnieren + reine Symbole in einer Zeile. */
+@media (max-width: 791px) {
+  .watch-title { font-size: 19px; line-height: 25px; font-weight: 700; }
+  .watch-mobile-meta { font-size: 14px; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; margin-top: 6px; }
+  .watch-mobile-meta .wm-channel { color: var(--text); font-weight: 600; }
+  .watch-mobile-meta .more-link { color: var(--text); font-weight: 600; }
+  .watch-owner-row { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; margin-top: 14px; }
+  .watch-owner-row .owner { flex: none; gap: 10px; }
+  .watch-owner-row .owner-text { display: none; }
+  .watch-owner-row .owner-avatar .avatar { --s: 38px !important; }
+  .watch-actions { flex: 1; justify-content: flex-end; margin: 0; padding: 0; gap: 2px; }
+  .watch-actions .seg-btn { display: contents; }
+  .watch-actions .btn { background: transparent !important; border: 0; padding: 0; width: 44px; height: 44px; justify-content: center; border-radius: 50%; }
+  .watch-actions .btn::before, .watch-actions .btn::after { display: none !important; }
+  .watch-actions .btn span, .watch-actions .dl-btn { display: none !important; }
+  .watch-actions .btn .icon, .watch-actions .more-btn .icon { width: 26px; height: 26px; margin: 0; }
+  .watch-actions .more-btn { background: transparent !important; }
+}
+.ci-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.ci-row:last-child { border-bottom: 0; }
+.ci-preview { width: 32px; display: flex; justify-content: center; }
+.ci-label { flex: 1; display: flex; flex-direction: column; }
+.icon-custom { fill: currentColor; }
+.p-minimize { display: none; }
+.short-top-title { font-size: 22px; font-weight: 700; color: #fff; margin-left: 12px; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); }
+/* Player (Handy) wie in der App: ⌄ oben links, CC + Einstellungen oben rechts. */
+@media (max-width: 791px) {
+  .player:not(.mini) .p-minimize { display: inline-flex; }
+  .player:not(.mini):not(.fullscreen) .p-title { display: none; }
+  .player:not(.mini) .p-right .p-cc, .player:not(.mini) .p-right .p-settings-btn, .player:not(.mini) .p-right .p-autoplay { position: absolute; top: 8px; }
+  .player:not(.mini) .p-right .p-settings-btn { right: 8px; }
+  .player:not(.mini) .p-right .p-cc { right: 56px; }
+  .player:not(.mini) .p-right .p-autoplay { right: 108px; top: 18px; }
+  .player:not(.mini) .p-big { background: rgba(0, 0, 0, 0.45); }
+}

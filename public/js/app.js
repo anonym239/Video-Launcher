@@ -2,7 +2,7 @@
 import { route, startRouter, go, clearKeepAlive, render } from './router.js';
 import { state, on, loadStatus, setAuth, signedIn, saveSettings } from './state.js';
 import { api, html, raw, el, esc, debounce, $, prefetch } from './util.js';
-import { icon } from './icons.js';
+import { icon, setCustomIcons } from './icons.js';
 import { openMenu, openDialog, closeOverlay, toast, avatar, isMobile } from './components.js';
 import { player } from './player.js';
 
@@ -37,9 +37,17 @@ route('/([A-Za-z0-9_-]{11})', () => import('./pages/resolve.js'), { name: 'resol
 // ---- Kopfleiste ------------------------------------------------------------------------
 const LOGO = `<svg class="logo-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#7C4DFF"/><path d="M12 1a11 11 0 0 1 11 11h-3.6A7.4 7.4 0 0 0 12 4.6z" fill="#00E5FF"/><path d="M9.4 7.2v9.6L17 12z" fill="#fff"/></svg>`;
 
+// Name und Logo oben links – in den Einstellungen frei wählbar (bleibt auf dem Gerät).
+function applyBrand() {
+  const logo = icon('logo', 'logo-svg') || LOGO;
+  const name = (state.settings?.brandName || '').trim() || 'Video Launcher';
+  document.querySelectorAll('.logo-icon').forEach((n) => (n.innerHTML = logo));
+  document.querySelectorAll('.logo-text').forEach((n) => (n.textContent = name));
+}
+
 function buildMasthead() {
   $('#guide-btn').innerHTML = icon('menu');
-  $('.logo-icon').innerHTML = LOGO;
+  applyBrand();
   $('#search-back').innerHTML = icon('back');
   $('.search-icon-inline').innerHTML = icon('search');
   $('#search-clear').innerHTML = icon('close');
@@ -544,6 +552,14 @@ function showFirstRunNotice() {
 
 // ---- Start ----------------------------------------------------------------------------------
 async function boot() {
+  // Eigene Symbole zuerst (aus dem Zwischenspeicher sofort, vom Server aktualisiert).
+  api('/api/custom-icons')
+    .then((m) => {
+      const before = localStorage.getItem('vl:customIcons') || '{}';
+      setCustomIcons(m);
+      if (JSON.stringify(m) !== before) location.reload();
+    })
+    .catch(() => {});
   buildMasthead();
   buildGuide();
   $('#player-host').appendChild(player.root);
@@ -613,6 +629,8 @@ async function boot() {
     toast(e.message);
   }
   renderAccountButton();
+  applyBrand();
+  on('settings', applyBrand);
   setInterval(() => signedIn() && refreshNotifCount(), 5 * 60 * 1000);
   on('auth', () => (signedIn() ? hideLoginGate() : showLoginGate()));
   if (!signedIn()) showLoginGate();

@@ -2,9 +2,11 @@
 import { YTNodes } from 'youtubei.js';
 import { formatNumberDe } from './polyfills.js';
 import { getYT, resetYT, authState, isSignedIn, startOAuth, cancelOAuth, cookieLogin, signOut } from './yt.js';
-import { store } from './store.js';
+import { store, JsonFile } from './store.js';
+
+const customIcons = new JsonFile('custom-icons.json', () => ({}));
 import {
-  collectItems, itemsFromFeed, itemsFromTvRaw, normalizeComment, textToHtml, thumb, txt, escapeHtml, videoThumb, formatDuration, unwrap
+  collectItems, NEWS_QUERY, itemsFromFeed, itemsFromTvRaw, normalizeComment, textToHtml, thumb, txt, escapeHtml, videoThumb, formatDuration, unwrap
 } from './normalize.js';
 import { streamsFor, dashManifest, invalidate, resolveVideo, downloadOptions, openDownload, isAllowedUpstream } from './stream.js';
 import * as offline from './offline.js';
@@ -144,6 +146,10 @@ export const routes = {
     }
     const features = (q.get('features') || '').split(',').filter((f) => ['hd', 'subtitles', 'creative_commons', '3d', 'live', '4k', '360', 'location', 'hdr', 'vr180'].includes(f));
     if (features.length) filters.features = features;
+    // Gleiche Suche kurz danach (Zurück, erneut abschicken) kommt sofort aus dem Speicher.
+    const ckey = JSON.stringify([query, filters]);
+    const hit = searchCache.get(ckey);
+    if (hit && Date.now() - hit.at < 3 * 60 * 1000) return hit.data;
     const yt = await getYT();
     const s = await yt.search(query, filters);
     let corrected = null;
@@ -151,7 +157,11 @@ export const routes = {
       const dym = s.results?.find?.((n) => n.type === 'DidYouMean' || n.type === 'ShowingResultsFor');
       if (dym) corrected = txt(dym.corrected_query || dym.did_you_mean);
     } catch {}
-    return { items: collectItems(s.results), cont: hasCont(s) ? saveCont(s, 'search') : null, corrected, estimated: s.estimated_results || 0 };
+    // „Eilmeldung“ & Co. nur, wenn ausdrücklich nach Nachrichten gesucht wird.
+    const data = { items: collectItems(s.results, { news: NEWS_QUERY.test(query) }), cont: hasCont(s) ? saveCont(s, 'search') : null, corrected, estimated: s.estimated_results || 0 };
+    searchCache.set(ckey, { at: Date.now(), data });
+    if (searchCache.size > 50) searchCache.delete(searchCache.keys().next().value);
+    return data;
   },
 
   'GET /api/suggest': async (q) => {
@@ -201,6 +211,23 @@ export const routes = {
     if (off) return offlineStreams(off);
     if (q.get('fresh')) invalidate(id);
     return streamsFor(id);
+  },
+
+  // ---- Eigene Symbole (nur auf diesem Gerät) ----------------------------------
+  'GET /api/custom-icons': async () => customIcons.data,
+  'POST /api/custom-icons': async (q, p, body) => {
+    const name = String(body.name || '');
+    const svg = String(body.svg || '');
+    if (!/^[a-zA-Z]{2,30}$/.test(name)) throw httpError(400, 'Ungültiger Symbolname');
+    if (!/^<svg[\s>]/.test(svg) || svg.length > 60000 || /<script|javascript:|\son\w+=/i.test(svg)) throw httpError(400, 'Ungültige SVG-Datei');
+    customIcons.data[name] = svg;
+    customIcons.flush();
+    return customIcons.data;
+  },
+  'DELETE /api/custom-icons/:name': async (q, { name }) => {
+    delete customIcons.data[name];
+    customIcons.flush();
+    return customIcons.data;
   },
 
   // ---- Offline-Downloads (App-Speicher) -------------------------------------
@@ -954,6 +981,7 @@ function cachedVideo(id, list, index) {
 }
 
 // ---- Shorts: Zwischenspeicher & Vorladen ---------------------------------------------
+const searchCache = new Map(); // Suchanfrage -> { at, data }
 const shortMetaCache = new Map(); // id -> Promise
 function shortMeta(id) {
   const hit = shortMetaCache.get(id);
@@ -1260,7 +1288,8 @@ async function watchData(info, id) {
       name: owner?.author?.name || b.author || '',
       avatar: thumb(owner?.author?.thumbnails, 176),
       subscribers: txt(owner?.subscriber_count),
-      verified: !!owner?.author?.is_verified
+      verified: !!owner?.author?.is_verified,
+      handle: (String(owner?.author?.url || owner?.author?.endpoint?.metadata?.url || '').match(/\/(@[^/?#]+)/) || [])[1] || ''
     },
     subscribed,
     descriptionHtml,

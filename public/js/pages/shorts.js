@@ -52,6 +52,7 @@ export default async function shorts({ node, params, signal }) {
         <div class="short-video-slot"></div>
         <div class="short-top">
           <button class="short-round short-back" aria-label="Zurück">${raw(icon('back'))}</button>
+          <span class="short-top-title">Shorts</span>
           <span class="short-top-spacer"></span>
           <button class="short-round short-search" aria-label="Suchen">${raw(icon('search'))}</button>
           <button class="short-round more" aria-label="Mehr">${raw(icon('more'))}</button>

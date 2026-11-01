@@ -1,5 +1,5 @@
 import { api, el, html, raw } from '../util.js';
-import { icon } from '../icons.js';
+import { icon, CUSTOMIZABLE, sanitizeSvg, setCustomIcons } from '../icons.js';
 import { avatar, toast, openDialog } from '../components.js';
 import { state, saveSettings, signedIn, setAuth, unblockChannel } from '../state.js';
 import { loginDialog } from '../app.js';
@@ -52,6 +52,13 @@ export default async function settings({ node }) {
       <p class="muted small">Optional: Ist <code>yt-dlp</code> auf dem Handy installiert (<code>pip install yt-dlp</code>), wird es automatisch als Ausweichlösung genutzt.</p>
     </section>
 
+    <section class="settings-card custom-icons">
+      <h2>Eigene Symbole</h2>
+      <label class="setting"><span>Name oben links<small>Leer lassen für „Video Launcher“. Bleibt nur auf diesem Gerät.</small></span><input class="brand-input" maxlength="30" placeholder="Video Launcher" value="${s.brandName || ''}"></label>
+      <p class="muted small">Hier kannst du einzelne Symbole durch eigene SVG-Dateien ersetzen (z. B. Logo oder Shorts). Die Dateien bleiben nur auf diesem Gerät.</p>
+      <div class="ci-list"></div>
+    </section>
+
     <section class="settings-card about-app">
       <h2>Über</h2>
       <p>Video Launcher läuft komplett auf deinem Gerät: Inhalte werden direkt von den öffentlichen Servern abgerufen – ohne API-Key, ohne Werbung, ohne zentralen Server und ohne Datensammlung.</p>
@@ -62,6 +69,15 @@ export default async function settings({ node }) {
   </div>`.toString();
 
   renderAccount(node.querySelector('.account-row'));
+  renderCustomIcons(node.querySelector('.ci-list'));
+  node.querySelector('.brand-input').addEventListener('change', async (e) => {
+    try {
+      await saveSettings({ brandName: e.target.value.trim().slice(0, 30) });
+      toast('Gespeichert');
+    } catch (err) {
+      toast(err.message);
+    }
+  });
 
   node.querySelectorAll('[data-key]').forEach((input) => {
     input.addEventListener('change', async () => {
@@ -135,6 +151,38 @@ function renderAccount(box) {
   } else {
     const row = el(html`<div class="account-info">${raw(icon('account', 'big-icon'))}<div><b>Nicht angemeldet</b><div class="muted small">Melde dich an, um deine YouTube-Abos, Playlists und Empfehlungen zu nutzen.</div></div><button class="btn btn-blue login">Anmelden</button></div>`);
     row.querySelector('.login').onclick = loginDialog;
+    box.appendChild(row);
+  }
+}
+
+async function renderCustomIcons(box) {
+  let current = {};
+  try {
+    current = await api('/api/custom-icons');
+  } catch {}
+  box.innerHTML = '';
+  for (const [name, label] of Object.entries(CUSTOMIZABLE)) {
+    const row = el(html`<div class="ci-row">
+      <span class="ci-preview">${raw(icon(name))}</span>
+      <span class="ci-label">${label}${current[name] ? html`<small class="muted">eigene Datei</small>` : ''}</span>
+      <label class="btn btn-tonal small">Datei wählen<input type="file" accept=".svg,image/svg+xml" hidden></label>
+      ${current[name] ? html`<button class="btn btn-text small ci-reset">Zurücksetzen</button>` : ''}
+    </div>`);
+    row.querySelector('input').onchange = async (e) => {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      try {
+        const svg = sanitizeSvg(await f.text());
+        setCustomIcons(await api('/api/custom-icons', { method: 'POST', body: { name, svg } }));
+        location.reload();
+      } catch (err) {
+        toast(err.message);
+      }
+    };
+    row.querySelector('.ci-reset')?.addEventListener('click', async () => {
+      setCustomIcons(await api(`/api/custom-icons/${name}`, { method: 'DELETE' }));
+      location.reload();
+    });
     box.appendChild(row);
   }
 }

@@ -30,6 +30,7 @@ export class Player {
         <div class="p-endscreen" hidden></div>
         <div class="p-controls">
           <div class="p-top">
+            <button class="p-btn p-minimize" data-act="minimize" aria-label="Verkleinern">${raw(icon('down'))}</button>
             <div class="p-title"></div>
             <button class="p-btn p-mini-close" data-act="close" aria-label="Schließen">${raw(icon('close'))}</button>
           </div>
@@ -811,6 +812,10 @@ export class Player {
       else if (act === 'cc') this.toggleCaptions();
       else if (act === 'chapters') emit('player:chapters');
       else if (act === 'close') this.hooks.onClose?.();
+      else if (act === 'minimize') {
+        if (document.fullscreenElement) document.exitFullscreen?.();
+        emit('player:mini');
+      }
       else if (act === 'settings') {
         if (this.q('.p-menu').hidden) this.#openMenu('main');
         else this.#closeMenu();

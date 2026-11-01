@@ -165,7 +165,7 @@ function renderInfo(box, d) {
   const info = el(html`<div>
     ${d.superTitle ? html`<div class="super-title">${raw(d.superTitle)}</div>` : ''}
     <h1 class="watch-title">${d.title}</h1>
-    <div class="watch-mobile-meta">${d.shortViews || d.views} ${d.relativeDate ? html`• ${d.relativeDate}` : ''} <button class="link-btn more-link">…mehr</button></div>
+    <div class="watch-mobile-meta"><a class="wm-channel" href="/channel/${d.channel.id}">${d.channel.handle || d.channel.name}</a>${d.likes != null ? html` <span>${compact(d.likes)} Likes</span>` : ''} <span>${d.shortViews || d.views}</span>${d.relativeDate ? html` <span>${d.relativeDate}</span>` : ''} <button class="link-btn more-link">mehr</button></div>
     <div class="watch-owner-row">
       <div class="owner">
         <a href="/channel/${d.channel.id}" class="owner-avatar">${avatar(d.channel.avatar, 40, d.channel.name)}</a>
@@ -181,7 +181,7 @@ function renderInfo(box, d) {
           <button class="btn btn-tonal dislike-btn ${d.disliked ? 'on' : ''}" aria-label="Mag ich nicht">${raw(icon(d.disliked ? 'dislikeFilled' : 'dislike'))}</button>
         </div>
         <button class="btn btn-tonal share-btn">${raw(icon('share'))}<span>Teilen</span></button>
-        <button class="btn btn-tonal save-btn">${raw(icon('save'))}<span>Speichern</span></button>
+        <button class="btn btn-tonal save-btn">${raw(icon(isMobile() ? 'bookmark' : 'save'))}<span>Speichern</span></button>
         <button class="btn btn-tonal dl-btn">${raw(icon('download'))}<span>Herunterladen</span></button>
         <button class="icon-btn btn-tonal round more-btn" aria-label="Weitere Aktionen">${raw(icon('moreH'))}</button>
       </div>
@@ -256,6 +256,7 @@ function renderInfo(box, d) {
   info.querySelector('.dl-btn').onclick = () => downloadDialog(video);
   info.querySelector('.more-btn').onclick = (e) =>
     openMenu(e.currentTarget, [
+      ...(isMobile() ? [{ icon: 'download', label: 'Herunterladen', run: () => downloadDialog(video) }] : []),
       { icon: 'addQueue', label: 'Zur Wiedergabeliste hinzufügen', run: () => addToQueue(video) },
       { icon: 'clock', label: 'Später ansehen', run: () => api('/api/save', { method: 'POST', body: { video, playlistId: 'WL', on: true } }).then(() => toast('Zu „Später ansehen“ hinzugefügt')).catch((er) => toast(er.message)) },
       { icon: 'external', label: 'Auf youtube.com öffnen', run: () => window.open(`https://www.youtube.com/watch?v=${d.id}`, '_blank', 'noopener') },
