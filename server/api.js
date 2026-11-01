@@ -6,7 +6,8 @@ import { store } from './store.js';
 import {
   collectItems, itemsFromFeed, itemsFromTvRaw, normalizeComment, textToHtml, thumb, txt, escapeHtml, videoThumb, formatDuration, unwrap
 } from './normalize.js';
-import { streamsFor, dashManifest, invalidate, resolveVideo, downloadOptions } from './stream.js';
+import { streamsFor, dashManifest, invalidate, resolveVideo, downloadOptions, openDownload, isAllowedUpstream } from './stream.js';
+import * as offline from './offline.js';
 import { localSubscriptionFeed } from './rss.js';
 import { EndlessFeed, shuffle } from './endless.js';
 import { forYou, interleave, cleanup } from './recommend.js';
@@ -178,7 +179,15 @@ export const routes = {
 
   'GET /api/video/:id': async (q, { id }) => {
     checkId(id);
-    const data = await cachedVideo(id, q.get('list'), q.get('index'));
+    let data;
+    try {
+      data = await cachedVideo(id, q.get('list'), q.get('index'));
+    } catch (e) {
+      // Ohne Internet: heruntergeladenes Video trotzdem anzeigen.
+      const off = offline.getItem(id);
+      if (!off) throw e;
+      return offlineVideoData(off);
+    }
     // Position und Abo-Status können sich seit dem Zwischenspeichern geändert haben.
     return { ...data, position: store.getPosition(id), subscribed: isSignedIn() ? data.subscribed : store.isSubscribed(data.channel.id) };
   },
@@ -187,8 +196,48 @@ export const routes = {
 
   'GET /api/streams/:id': async (q, { id }) => {
     checkId(id);
+    // Heruntergeladen? Dann immer die Datei aus dem App-Speicher (geht auch offline).
+    const off = offline.getItem(id);
+    if (off) return offlineStreams(off);
     if (q.get('fresh')) invalidate(id);
     return streamsFor(id);
+  },
+
+  // ---- Offline-Downloads (App-Speicher) -------------------------------------
+  'GET /api/offline': async () => ({ items: offline.items().map(offline.publicItem), jobs: offline.jobList() }),
+  'GET /api/online': async () => ({ online: await offline.isOnline() }),
+  'POST /api/offline/:id': async (q, { id }, body) => {
+    checkId(id);
+    const url = String(body.url || '');
+    const meta = {
+      title: String(body.title || ''),
+      short: !!body.short,
+      label: String(body.label || ''),
+      duration: Number(body.duration) || 0,
+      channel: body.channel && typeof body.channel === 'object' ? { id: String(body.channel.id || ''), name: String(body.channel.name || ''), avatar: String(body.channel.avatar || '') } : null
+    };
+    let open;
+    const dl = url.match(/^\/dl\/([\w-]{11})\?(.*)$/);
+    if (dl) {
+      const p = new URLSearchParams(dl[2]);
+      open = (signal) => openDownload(id, { v: p.get('v'), a: p.get('a'), signal });
+    } else {
+      // Einfacher Download (z. B. 360p mit Ton): Quelle steckt im Proxy-Link /vp?u=…
+      const vp = url.match(/^\/vp\?(.*)$/);
+      const target = vp ? new URLSearchParams(vp[1]).get('u') : null;
+      if (!target || !isAllowedUpstream(target)) throw httpError(400, 'Ungültige Download-Quelle');
+      open = async (signal) => {
+        const { fetchChunks } = await import('./mux.js');
+        const r = await resolveVideo(id).catch(() => null);
+        return { source: fetchChunks(target, { signal }), size: 0, audioOnly: !!body.audioOnly, height: 0, info: r?.info };
+      };
+    }
+    offline.start(id, meta, open);
+    return { ok: true, jobs: offline.jobList() };
+  },
+  'DELETE /api/offline/:id': async (q, { id }) => {
+    offline.remove(checkId(id));
+    return { ok: true };
   },
 
   'GET /api/download/:id': async (q, { id }) => downloadOptions(checkId(id)),
@@ -332,30 +381,32 @@ export const routes = {
   },
 
   'GET /api/shorts': async (q) => {
-    const hint = q.get('seed');
-    let key = q.get('cont');
-    let feed;
-    if (key) {
-      feed = loadCont(key, 'shorts');
-    } else {
-      feed = new ShortsFeed(getYT, {
-        history: store.history,
-        liked: store.listOf('liked'),
-        signedIn: isSignedIn(),
-        subsShorts: async () => (await localSubscriptionFeed(store.subscriptions, { shorts: true })).items.map((v) => v.id)
-      });
-      key = saveCont(feed, 'shorts');
+    try {
+      const r = await shortsFeed(q);
+      // Kaum etwas bekommen (offline)? Heruntergeladene Shorts anhängen.
+      if (r.ids.length <= 1 && !q.get('cont')) {
+        const own = offline.items().filter((i) => i.short).map((i) => i.id);
+        if (own.length) return { ...r, ids: [...r.ids, ...own.filter((i) => !r.ids.includes(i))] };
+      }
+      return r;
+    } catch (e) {
+      // Ohne Internet: heruntergeladene Shorts zeigen.
+      const own = offline.items().filter((i) => i.short).map((i) => i.id);
+      if (!own.length || q.get('cont')) throw e;
+      const hint = q.get('seed');
+      return { ids: hint && own.includes(hint) ? [hint, ...own.filter((i) => i !== hint)] : own, cont: null, offline: true };
     }
-    let ids = await feed.next(hint);
-    // Direkt geöffneter Short (/shorts/ID) kommt zuerst.
-    if (!q.get('cont') && hint) ids = [hint, ...ids.filter((i) => i !== hint)];
-    prefetchShorts(ids.slice(0, 3));
-    return { ids, cont: key };
   },
-
   'GET /api/short/:id': async (q, { id }) => {
     checkId(id);
-    return shortMeta(id);
+    try {
+      return await shortMeta(id);
+    } catch (e) {
+      const off = offline.getItem(id);
+      if (!off) throw e;
+      const p = offline.publicItem(off);
+      return { id, title: p.title, channel: p.channel, likes: null, liked: false, disliked: false, views: null, comments: '', subscribed: store.isSubscribed(p.channel.id), thumbnail: p.thumbnail, offline: true };
+    }
   },
 
 
@@ -719,6 +770,77 @@ export const routes = {
     return publicAuth();
   }
 };
+
+// Video-Seite ohne Internet: Angaben aus dem Download.
+function offlineVideoData(off) {
+  const p = offline.publicItem(off);
+  return {
+    id: p.id,
+    title: p.title,
+    channel: { ...p.channel, subscribers: '', verified: false },
+    views: 'Heruntergeladen',
+    shortViews: '',
+    published: '',
+    relativeDate: '',
+    durationText: p.durationText,
+    descriptionHtml: (off.description || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]).replace(/\n/g, '<br>'),
+    keywords: [],
+    chapters: [],
+    metadataRows: [],
+    superTitle: '',
+    likes: null,
+    liked: false,
+    disliked: false,
+    subscribed: store.isSubscribed(p.channel.id),
+    position: store.getPosition(p.id),
+    related: offline.items().filter((i) => i.id !== p.id && !i.short).map(offline.publicItem),
+    relatedCont: null,
+    offline: true
+  };
+}
+
+function offlineStreams(off) {
+  const p = offline.publicItem(off);
+  const url = `/offline/${off.id}.${off.audioOnly ? 'm4a' : 'mp4'}`;
+  return {
+    id: off.id,
+    client: 'offline',
+    source: 'offline',
+    offline: true,
+    live: false,
+    duration: off.duration || 0,
+    title: p.title,
+    thumbnail: p.thumbnail,
+    dash: null,
+    hls: null,
+    progressive: [{ itag: 0, label: off.label || 'Download', mime: off.audioOnly ? 'audio/mp4' : 'video/mp4', url }],
+    audio: [],
+    captions: [],
+    storyboard: null
+  };
+}
+
+async function shortsFeed(q) {
+  const hint = q.get('seed');
+  let key = q.get('cont');
+  let feed;
+  if (key) {
+    feed = loadCont(key, 'shorts');
+  } else {
+    feed = new ShortsFeed(getYT, {
+      history: store.history,
+      liked: store.listOf('liked'),
+      signedIn: isSignedIn(),
+      subsShorts: async () => (await localSubscriptionFeed(store.subscriptions, { shorts: true })).items.map((v) => v.id)
+    });
+    key = saveCont(feed, 'shorts');
+  }
+  let ids = await feed.next(hint);
+  // Direkt geöffneter Short (/shorts/ID) kommt zuerst.
+  if (!q.get('cont') && hint) ids = [hint, ...ids.filter((i) => i !== hint)];
+  prefetchShorts(ids.slice(0, 3));
+  return { ids, cont: key };
+}
 
 async function playlistFallback(id, err) {
   const titles = { WL: 'Später ansehen', LL: 'Videos mit „Mag ich“-Bewertung' };

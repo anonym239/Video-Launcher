@@ -8,6 +8,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { routes, httpError, warmHome } from './api.js';
 import { proxy, download } from './stream.js';
+import { serveOffline } from './offline.js';
 import { getYT } from './yt.js';
 import { store } from './store.js';
 
@@ -126,6 +127,7 @@ async function handle(req, res) {
   const { pathname } = url;
 
   if (pathname === '/vp') return proxy(req, res, url.searchParams);
+  if (pathname.startsWith('/offline/')) return serveOffline(req, res, pathname.slice('/offline/'.length));
   const dl = pathname.match(/^\/dl\/([\w-]{11})$/);
   if (dl) {
     return download(req, res, dl[1], url.searchParams).catch((e) => {

@@ -25,6 +25,7 @@ route('/feed/channels', () => import('./pages/channels.js'), { name: 'channels' 
 route('/feed/you', () => import('./pages/you.js'), { name: 'you' });
 route('/feed/library', () => import('./pages/you.js'), { name: 'you' });
 route('/feed/history', () => import('./pages/history.js'), { name: 'history' });
+route('/feed/downloads', () => import('./pages/downloads.js'), { name: 'downloads' });
 route('/feed/playlists', () => import('./pages/playlists.js'), { name: 'playlists' });
 route('/feed/trending', () => import('./pages/explore.js'), { name: 'explore' });
 route('/feed/explore', () => import('./pages/explore.js'), { name: 'explore' });
@@ -279,7 +280,8 @@ function buildGuide() {
     { href: '/feed/history', label: 'Verlauf', icon: 'history', name: 'history' },
     { href: '/feed/playlists', label: 'Playlists', icon: 'playlist', name: 'playlists' },
     { href: '/playlist?list=WL', label: 'Später ansehen', icon: 'clock' },
-    { href: '/playlist?list=LL', label: 'Videos mit „Mag ich“', icon: 'like' }
+    { href: '/playlist?list=LL', label: 'Videos mit „Mag ich“', icon: 'like' },
+    { href: '/feed/downloads', label: 'Downloads', icon: 'download', name: 'downloads' }
   ];
   const explore = [
     { href: '/feed/trending', label: 'Trends', icon: 'trending', name: 'explore' },
@@ -607,6 +609,14 @@ async function boot() {
   on('auth', () => (signedIn() ? hideLoginGate() : showLoginGate()));
   if (!signedIn()) showLoginGate();
   startRouter();
+  // Ohne Internet direkt die Downloads öffnen (alles aus dem App-Speicher).
+  if (location.pathname === '/') {
+    api('/api/online')
+      .then((r) => {
+        if (!r.online && location.pathname === '/') go('/feed/downloads', { replace: true });
+      })
+      .catch(() => {});
+  }
   // Erst nach dem ersten Rendern zeigen, sonst schließt die Navigation den Dialog sofort.
   showFirstRunNotice();
 }

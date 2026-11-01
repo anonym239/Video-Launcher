@@ -513,21 +513,53 @@ export async function downloadDialog(video) {
   const body = el('<div class="download-list"><div class="spinner"></div></div>');
   openDialog({ title: 'Herunterladen', body, className: 'download-dialog' });
   try {
-    const { options } = await api(`/api/download/${video.id}`);
+    const [{ options }, off] = await Promise.all([api(`/api/download/${video.id}`), api('/api/offline').catch(() => ({ items: [], jobs: [] }))]);
     body.innerHTML = '';
-    if (!options.length) body.textContent = 'Für dieses Video sind keine Downloads verfügbar.';
+    const have = off.items.find((i) => i.id === video.id);
+    if (have) {
+      const row = el(html`<div class="dl-have">${raw(icon('check'))}<span>Bereits heruntergeladen${have.label ? ` (${have.label})` : ''}</span><a class="btn btn-text" href="/feed/downloads">Ansehen</a></div>`);
+      row.querySelector('a').addEventListener('click', () => closeOverlay());
+      body.appendChild(row);
+    }
+    if (!options.length) body.appendChild(document.createTextNode('Für dieses Video sind keine Downloads verfügbar.'));
     const safe = (video.title || video.id).replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120);
     for (const o of options) {
-      // Direkte Links (einfacher Download) bekommen einen Dateinamen über den Proxy.
-      const href = o.direct ? `${o.url}&dl=${encodeURIComponent(safe + (o.kind === 'audio' ? '.m4a' : '.mp4'))}` : o.url;
-      const row = el(html`<a class="menu-item dl-row" href="${href}" download>${raw(icon(o.kind === 'audio' ? 'music' : 'download'))}<span><b>${o.label}</b><small class="muted">${o.sub}</small></span></a>`);
-      row.addEventListener('click', () => {
-        toast(`Download gestartet: ${o.label}`);
-        setTimeout(closeOverlay, 300);
+      const row = el(html`<button class="menu-item dl-row">${raw(icon(o.kind === 'audio' ? 'music' : 'download'))}<span><b>${o.label}</b><small class="muted">${o.sub}</small></span></button>`);
+      row.addEventListener('click', async () => {
+        // Immer im App-Speicher sichern – so geht es auch ohne Internet.
+        try {
+          await api(`/api/offline/${video.id}`, {
+            method: 'POST',
+            body: {
+              url: o.url,
+              label: o.label,
+              audioOnly: o.kind === 'audio',
+              title: video.title || '',
+              short: !!video.short,
+              duration: video.duration || 0,
+              channel: video.channel ? { id: video.channel.id || '', name: video.channel.name || '', avatar: video.channel.avatar || '' } : null
+            }
+          });
+          toast('Download gestartet – zu finden unter „Du“ → „Downloads“');
+        } catch (e) {
+          toast(e.message);
+          return;
+        }
+        // Optional (Einstellungen): zusätzlich eine Kopie in die Galerie/den Download-Ordner.
+        if (state.settings.saveToGallery) {
+          const href = o.direct ? `${o.url}&dl=${encodeURIComponent(safe + (o.kind === 'audio' ? '.m4a' : '.mp4'))}` : o.url;
+          const a = document.createElement('a');
+          a.href = href;
+          a.download = '';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }
+        setTimeout(closeOverlay, 200);
       });
       body.appendChild(row);
     }
-    body.appendChild(el('<p class="muted small dl-hint">Hohe Qualitäten werden beim Herunterladen aus Bild und Ton zusammengesetzt.</p>'));
+    body.appendChild(el('<p class="muted small dl-hint">Downloads werden in der App gespeichert und lassen sich auch ohne Internet ansehen.</p>'));
   } catch (e) {
     body.textContent = e.message;
   }

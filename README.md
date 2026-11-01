@@ -37,6 +37,7 @@ In der App:
 - **Shorts**: vertikal wischen, Endlos-Feed, Schleife, Liken, Kommentare, Teilen, Abonnieren
 - **Kanäle**: Banner, Abonnieren (inkl. Glocke), Tabs für Startseite, Videos, Shorts, Live, Playlists und Beiträge, Kanalsuche und Kanalinfo
 - **Abos, Verlauf, Playlists, Später ansehen, Mag ich** aus deinem YouTube-Konto (Anmeldung ist Pflicht)
+- **Downloads** (Videos, Shorts, nur Audio) bis 4K: werden in der App gespeichert und lassen sich **ohne Internet** ansehen – ohne Verbindung öffnet die App automatisch die Downloads. Optional (Einstellungen → Erweitert) zusätzlich eine Kopie in der Galerie/im Download-Ordner.
 - **Benachrichtigungen** (wenn angemeldet), Hashtag-Seiten, Trends
 - „Kein Interesse“ und „Kanal nicht empfehlen“, Wiedergabeverlauf pausieren oder löschen, Backup exportieren und importieren
 - Dunkles, helles oder Gerätedesign; Layout für Handy, Tablet und Desktop

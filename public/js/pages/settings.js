@@ -48,6 +48,7 @@ export default async function settings({ node }) {
     <section class="settings-card">
       <h2>Erweitert</h2>
       <label class="setting"><span>Client-Reihenfolge für Streams<small>Wenn Videos nicht laden, hier die Reihenfolge ändern (kommagetrennt)</small></span><input class="clients-input" value="${(s.clients || []).join(', ')}"></label>
+      <label class="setting switch-row"><span>Downloads auch in der Galerie speichern<small>Zusätzlich eine Kopie im Download-Ordner des Handys ablegen</small></span><input type="checkbox" data-key="saveToGallery" ${s.saveToGallery ? raw('checked') : ''}></label>
       <p class="muted small">Optional: Ist <code>yt-dlp</code> auf dem Handy installiert (<code>pip install yt-dlp</code>), wird es automatisch als Ausweichlösung genutzt.</p>
     </section>
 

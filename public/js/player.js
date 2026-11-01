@@ -127,6 +127,7 @@ export class Player {
     if (token !== this.loadToken) return;
     this.streams = streams;
     this.storyboard = streams.storyboard;
+    if (streams.offline && streams.thumbnail) this.q('.p-poster').style.backgroundImage = `url("${streams.thumbnail}")`;
     this.root.classList.toggle('is-live', !!streams.live);
     this.q('.p-live-badge').hidden = !streams.live;
     if (!this.meta.title && streams.title) {

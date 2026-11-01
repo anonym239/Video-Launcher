@@ -88,6 +88,7 @@ export default async function shorts({ node, params, signal }) {
     const m = await loadMeta(id);
     if (!m) return;
     slide._meta = m;
+    if (m.offline && m.thumbnail) slide.querySelector('.short-poster').src = m.thumbnail;
     slide.querySelector('.short-caption').textContent = m.title;
     const ch = slide.querySelector('.short-channel');
     ch.innerHTML = '';

@@ -451,35 +451,48 @@ function formatSize(bytes) {
   return `${Math.max(1, Math.round(bytes / 1e6))} MB`;
 }
 
-// /dl/ID?v=itag&a=itag – liefert die fertige Datei (Video+Audio zusammengefügt oder nur Audio).
-export async function download(req, res, id, query) {
+// Öffnet einen Download als Byte-Strom (Video+Audio zusammengefügt oder nur Audio).
+// Wird für /dl/… (Datei an den Browser) und für Offline-Downloads in der App genutzt.
+export async function openDownload(id, { v, a, signal }) {
   const { muxMp4, fetchChunks } = await import('./mux.js');
   const r = await resolveVideo(id);
   if (r.source !== 'youtubei') throw Object.assign(new Error('Für dieses Video ist nur der einfache Download verfügbar.'), { status: 400 });
   const yt = await getYT();
   const formats = r.info.streaming_data?.adaptive_formats || [];
   const find = (itag) => formats.find((f) => String(f.itag) === String(itag));
-  const vf = query.get('v') ? find(query.get('v')) : null;
-  const af = find(query.get('a'));
-  if (!af || (query.get('v') && !vf)) throw Object.assign(new Error('Format nicht gefunden'), { status: 404 });
-
+  const vf = v ? find(v) : null;
+  const af = find(a);
+  if (!af || (v && !vf)) throw Object.assign(new Error('Format nicht gefunden'), { status: 404 });
   const title = (r.info.basic_info?.title || id).replace(/[\\/:*?"<>|\n\r]+/g, '_').slice(0, 120);
-  const name = vf ? `${title} (${vf.height}p).mp4` : `${title}.m4a`;
-  const ctl = new AbortController();
-  req.on('close', () => ctl.abort());
   const open = async (f) => {
     const url = await f.decipher(yt.session.player);
-    return fetchChunks(url, { headers: upstreamHeaders(url), total: Number(f.content_length) || 0, signal: ctl.signal });
+    return fetchChunks(url, { headers: upstreamHeaders(url), total: Number(f.content_length) || 0, signal });
   };
+  const source = vf ? muxMp4(await open(vf), await open(af)) : await open(af);
+  return {
+    source,
+    audioOnly: !vf,
+    name: vf ? `${title} (${vf.height}p).mp4` : `${title}.m4a`,
+    mime: vf ? 'video/mp4' : 'audio/mp4',
+    size: (vf ? Number(vf.content_length || 0) : 0) + Number(af.content_length || 0),
+    height: vf?.height || 0,
+    info: r.info
+  };
+}
+
+// /dl/ID?v=itag&a=itag – liefert die fertige Datei (Video+Audio zusammengefügt oder nur Audio).
+export async function download(req, res, id, query) {
+  const ctl = new AbortController();
+  req.on('close', () => ctl.abort());
+  const d = await openDownload(id, { v: query.get('v'), a: query.get('a'), signal: ctl.signal });
   res.writeHead(200, {
-    'content-type': vf ? 'video/mp4' : 'audio/mp4',
-    'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+    'content-type': d.mime,
+    'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(d.name)}`,
     'cache-control': 'no-store',
-    ...(!vf && af.content_length ? { 'content-length': String(af.content_length) } : {})
+    ...(d.audioOnly && d.size ? { 'content-length': String(d.size) } : {})
   });
   try {
-    const source = vf ? muxMp4(await open(vf), await open(af)) : await open(af);
-    for await (const chunk of source) {
+    for await (const chunk of d.source) {
       if (!res.write(chunk)) await new Promise((ok) => res.once('drain', ok));
     }
     res.end();

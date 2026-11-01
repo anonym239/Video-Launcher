@@ -17,6 +17,13 @@ export default async function home({ node, signal }) {
       data = await api('/api/home' + qs({ chip }), { signal });
     } catch (e) {
       sk.replaceWith(grid);
+      // Kein Internet? Dann zu den heruntergeladenen Videos.
+      const off = await api('/api/offline').catch(() => null);
+      if (off?.items.length) {
+        const { go } = await import('../router.js');
+        go('/feed/downloads', { replace: true });
+        return;
+      }
       throw e;
     }
     sk.replaceWith(grid);
