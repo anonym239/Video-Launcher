@@ -112,18 +112,19 @@ const P = {
   moreH: 'M202.34-429.37q-20.8 0-35.63-14.9-14.84-14.89-14.84-35.81 0-21.12 14.91-35.83 14.92-14.72 35.86-14.72 20.72 0 35.73 14.8 15 14.8 15 35.79 0 21-15.12 35.83-15.11 14.84-35.91 14.84Zm277.7 0q-21 0-35.83-14.9-14.84-14.89-14.84-35.81 0-21.12 14.9-35.83 14.89-14.72 35.81-14.72 21.12 0 35.83 14.8 14.72 14.8 14.72 35.79 0 21-14.8 35.83-14.8 14.84-35.79 14.84Zm277.33 0q-21.05 0-35.89-14.9-14.85-14.89-14.85-35.81 0-21.12 14.99-35.83 14.98-14.72 36.03-14.72t35.88 14.8q14.84 14.8 14.84 35.79 0 21-14.98 35.83-14.98 14.84-36.02 14.84Z'
 };
 
-// Eigene Zeichnungen (viewBox 0 0 24 24) – bewusst KEIN Shorts-Logo (Marke),
-// sondern ein eigenes Symbol in derselben Strichstärke wie die übrigen Icons.
+// Eigene Zeichnungen und Marken-Symbole (viewBox 0 0 24 24).
 const OWN = {
   // Nach den Screenshots der App: Sprechblase mit zwei Zeilen, dicker Teilen-Pfeil.
   comment:
     '<g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 3.5V17A2.5 2.5 0 0 1 4 14.5v-8A2.5 2.5 0 0 1 6.5 4z"/><path d="M8 9h8M8 12.5h5.5"/></g>',
   share:
     '<path d="M13.5 4.8v3.9C8.3 9.3 4.6 12.6 3.8 18.6c2.1-3 5.3-4.4 9.7-4.4v4l7-6.7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+  // YouTube-Shorts-Logo (Pfad aus „Simple Icons“, CC0; die Marke gehört Google).
+  // Leiste: Umriss, ausgewählt gefüllt; Regal-Überschrift: rot mit weißem Play.
   shorts:
-    '<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="6.5" width="11.5" height="15" rx="3"/><path d="M8.5 2.5h7.5a4 4 0 0 1 4 4v9.5"/></g><path d="M8.6 10.6v6.8l5.4-3.4z"/>',
-  shortsFilled:
-    '<path d="M8.5 2.5h7.5a4 4 0 0 1 4 4v9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path fill-rule="evenodd" d="M7.5 5.5h5.5a4 4 0 0 1 4 4v9a4 4 0 0 1-4 4H7.5a4 4 0 0 1-4-4v-9a4 4 0 0 1 4-4zm1.1 5.1v6.8l5.4-3.4z"/>'
+    '<path d="m18.931 9.99-1.441-.601 1.717-.913a4.48 4.48 0 0 0 1.874-6.078 4.506 4.506 0 0 0-6.09-1.874L4.792 5.929a4.504 4.504 0 0 0-2.402 4.193 4.521 4.521 0 0 0 2.666 3.904c.036.012 1.442.6 1.442.6l-1.706.901a4.51 4.51 0 0 0-2.369 3.967A4.528 4.528 0 0 0 6.93 24c.725 0 1.437-.174 2.08-.508l10.21-5.406a4.494 4.494 0 0 0 2.39-4.192 4.525 4.525 0 0 0-2.678-3.904ZM9.597 15.19V8.824l6.007 3.184z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" transform="translate(1.3 1.3) scale(0.89)"/>',
+  shortsFilled: '<path fill-rule="evenodd" d="m18.931 9.99-1.441-.601 1.717-.913a4.48 4.48 0 0 0 1.874-6.078 4.506 4.506 0 0 0-6.09-1.874L4.792 5.929a4.504 4.504 0 0 0-2.402 4.193 4.521 4.521 0 0 0 2.666 3.904c.036.012 1.442.6 1.442.6l-1.706.901a4.51 4.51 0 0 0-2.369 3.967A4.528 4.528 0 0 0 6.93 24c.725 0 1.437-.174 2.08-.508l10.21-5.406a4.494 4.494 0 0 0 2.39-4.192 4.525 4.525 0 0 0-2.678-3.904ZM9.597 15.19V8.824l6.007 3.184z" transform="translate(.6 .6) scale(.95)"/>',
+  shortsLogo: '<path fill="#ff0033" d="m18.931 9.99-1.441-.601 1.717-.913a4.48 4.48 0 0 0 1.874-6.078 4.506 4.506 0 0 0-6.09-1.874L4.792 5.929a4.504 4.504 0 0 0-2.402 4.193 4.521 4.521 0 0 0 2.666 3.904c.036.012 1.442.6 1.442.6l-1.706.901a4.51 4.51 0 0 0-2.369 3.967A4.528 4.528 0 0 0 6.93 24c.725 0 1.437-.174 2.08-.508l10.21-5.406a4.494 4.494 0 0 0 2.39-4.192 4.525 4.525 0 0 0-2.678-3.904Z"/><path fill="#fff" d="M9.597 15.19V8.824l6.007 3.184z"/>'
 };
 
 // Gespiegelt dargestellt (Teilen-Pfeil zeigt nach rechts).
@@ -199,7 +200,8 @@ export async function imageToSvg(file) {
 export const CUSTOMIZABLE = {
   logo: 'Logo oben links',
   shorts: 'Shorts (Leiste)',
-  shortsFilled: 'Shorts (Leiste, ausgewählt / Regal)',
+  shortsFilled: 'Shorts (Leiste, ausgewählt)',
+  shortsLogo: 'Shorts-Logo (Regal-Überschrift)',
   home: 'Startseite',
   homeFilled: 'Startseite (ausgewählt)',
   subs: 'Abos',

@@ -168,7 +168,7 @@ export function postCard(item) {
 
 export function shelf(item, layout) {
   const node = el(html`<section class="shelf ${item.shorts ? 'shelf-shorts' : ''}">
-      ${item.title || item.shorts ? html`<h2 class="shelf-title">${item.shorts ? raw(icon('shortsFilled', 'shorts-red')) : ''}${item.title || 'Shorts'}</h2>` : ''}
+      ${item.title || item.shorts ? html`<h2 class="shelf-title">${item.shorts ? raw(icon('shortsLogo', 'shorts-red')) : ''}${item.title || 'Shorts'}</h2>` : ''}
       <div class="shelf-items ${item.shorts ? 'shorts-row' : ''}"></div>
       ${item.items.length > 6 && !item.shorts ? html`<button class="btn btn-text shelf-more">Mehr anzeigen ${raw(icon('down'))}</button>` : ''}
     </section>`);

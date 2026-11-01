@@ -1313,7 +1313,7 @@ body.android-pip .player .p-video { width: 100vw !important; height: 100vh !impo
 .notice-dialog .dialog-close { display: none; }
 
 /* Shorts-Symbol in der Navigation immer rot, wenn aktiv (wie in der App). */
-.pivot-item[data-name='shorts'].active .when-active, .mini-item[data-name='shorts'].active .when-active, .guide-item[data-name='shorts'].active .when-active { fill: var(--red); }
+/* Ausgewählter Shorts-Tab wie in der App: weiß gefüllt (nicht rot). */
 
 /* ==== Modernes Design (2026) ================================================== */
 /* Der Weichzeichner liegt auf einem Pseudo-Element: backdrop-filter direkt auf der

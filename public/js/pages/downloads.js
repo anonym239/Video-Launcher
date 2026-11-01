@@ -11,7 +11,7 @@ export default async function downloads({ node, signal }) {
     <h1 class="page-title">Downloads</h1>
     <div class="dl-offline-hint" hidden>${raw(icon('info'))}<span>Du bist offline. Deine heruntergeladenen Videos kannst du trotzdem ansehen.</span></div>
     <div class="dl-jobs"></div>
-    <section class="dl-shorts-section" hidden><h2 class="dl-sub">${raw(icon('shortsFilled', 'shorts-red'))} Shorts</h2><div class="dl-shorts"></div></section>
+    <section class="dl-shorts-section" hidden><h2 class="dl-sub">${raw(icon('shortsLogo', 'shorts-red'))} Shorts</h2><div class="dl-shorts"></div></section>
     <section class="dl-videos-section"><h2 class="dl-sub dl-videos-title" hidden>Videos</h2><div class="dl-videos list-col"></div></section>
   </div>`.toString();
 
