@@ -1355,3 +1355,6 @@ body.mobile-search .suggestions li { min-height: 48px; }
 .dl-hint { padding: 8px 16px 0; }
 @keyframes sa-pop { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
 .short-act.pop .sa-icon { animation: sa-pop 0.3s ease-out; }
+
+/* Kein Zoomen mit zwei Fingern (wie in der YouTube-App). Wischen/Scrollen bleibt. */
+html, body { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }

@@ -591,6 +591,11 @@ async function boot() {
   });
 
   window.addEventListener('resize', debounce(renderAccountButton, 200));
+  // Zoom-Gesten sperren (Safari/ältere WebViews ignorieren user-scalable=no).
+  for (const t of ['gesturestart', 'gesturechange']) document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches.length > 1) e.preventDefault();
+  }, { passive: false });
 
   try {
     await loadStatus();

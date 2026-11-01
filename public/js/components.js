@@ -411,7 +411,7 @@ export function openDialog({ title, body, actions = [], className = '', onClose 
 export function videoMenu(item, anchor, card) {
   const video = { id: item.id, title: item.title, thumbnail: item.thumbnail, duration: item.duration, channel: item.channel, short: !!item.short };
   const items = [
-    { icon: 'queue', label: 'Zur Wiedergabeliste hinzufügen', run: () => addToQueue(video) },
+    { icon: 'addQueue', label: 'Zur Wiedergabeliste hinzufügen', run: () => addToQueue(video) },
     { icon: 'clock', label: 'Zu „Später ansehen“ hinzufügen', run: () => saveTo(video, 'WL', true) },
     { icon: 'save', label: 'In Playlist speichern', run: () => saveDialog(video) },
     { icon: 'download', label: 'Herunterladen', run: () => downloadDialog(video) },
@@ -424,7 +424,7 @@ export function videoMenu(item, anchor, card) {
     } }
   ];
   if (item.channel?.id) {
-    items.push({ icon: 'block', label: 'Kanal nicht empfehlen', run: () => {
+    items.push({ icon: 'dontRecommend', label: 'Kanal nicht empfehlen', run: () => {
       blockChannel(item.channel);
       document.querySelectorAll(`.video-card`).forEach((c) => {
         if (c.querySelector(`a[href="/channel/${item.channel.id}"]`)) c.remove();
@@ -548,12 +548,12 @@ export function subscribeButton(channel, subscribed, { onChange } = {}) {
     if (on) {
       const items = [];
       if (signedIn()) {
-        items.push({ icon: 'bellFilled', label: 'Alle', run: () => notifPref(channel, 'ALL') });
+        items.push({ icon: 'bellActive', label: 'Alle', run: () => notifPref(channel, 'ALL') });
         items.push({ icon: 'bell', label: 'Personalisiert', run: () => notifPref(channel, 'PERSONALIZED') });
         items.push({ icon: 'bellOff', label: 'Keine', run: () => notifPref(channel, 'NONE') });
         items.push({ divider: true });
       }
-      items.push({ icon: 'close', label: 'Abo beenden', danger: true, run: () => {
+      items.push({ icon: 'unsubscribe', label: 'Abo beenden', danger: true, run: () => {
         openDialog({
           body: html`<p>Abo für ${channel.name || 'diesen Kanal'} beenden?</p>`,
           actions: [{ label: 'Abbrechen' }, { label: 'Abo beenden', primary: true, run: () => toggle(false) }]

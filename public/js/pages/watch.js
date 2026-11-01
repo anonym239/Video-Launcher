@@ -256,7 +256,7 @@ function renderInfo(box, d) {
   info.querySelector('.dl-btn').onclick = () => downloadDialog(video);
   info.querySelector('.more-btn').onclick = (e) =>
     openMenu(e.currentTarget, [
-      { icon: 'queue', label: 'Zur Wiedergabeliste hinzufügen', run: () => addToQueue(video) },
+      { icon: 'addQueue', label: 'Zur Wiedergabeliste hinzufügen', run: () => addToQueue(video) },
       { icon: 'clock', label: 'Später ansehen', run: () => api('/api/save', { method: 'POST', body: { video, playlistId: 'WL', on: true } }).then(() => toast('Zu „Später ansehen“ hinzugefügt')).catch((er) => toast(er.message)) },
       { icon: 'external', label: 'Auf youtube.com öffnen', run: () => window.open(`https://www.youtube.com/watch?v=${d.id}`, '_blank', 'noopener') },
       { icon: 'info', label: 'Statistiken', run: () => statsDialog(d) }
