@@ -160,7 +160,7 @@ export const routes = {
     let list = [];
     try {
       const yt = await getYT();
-      list = await yt.getSearchSuggestions(query);
+      list = (await yt.getSearchSuggestions(query)).filter((s) => typeof s === 'string' && s.trim());
     } catch {}
     const seen = new Set(hist.map((h) => h.toLowerCase()));
     return {

@@ -88,7 +88,6 @@ code { font-family: ui-monospace, Menlo, monospace; font-size: 0.92em; }
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 .icon { width: 24px; height: 24px; fill: currentColor; flex: none; display: block; }
-.icon.ic-line { fill: none; stroke: currentColor; }
 .icon-btn {
   width: 40px; height: 40px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center; flex: none;
@@ -1307,8 +1306,21 @@ body.android-pip .player .p-video { width: 100vw !important; height: 100vh !impo
 .pivot-item[data-name='shorts'].active .when-active, .mini-item[data-name='shorts'].active .when-active, .guide-item[data-name='shorts'].active .when-active { fill: var(--red); }
 
 /* ==== Modernes Design (2026) ================================================== */
-.masthead, .pivot-bar { background: color-mix(in srgb, var(--bg) 86%, transparent);
+/* Der Weichzeichner liegt auf einem Pseudo-Element: backdrop-filter direkt auf der
+   Kopfleiste macht sie zum Bezugsrahmen für position:fixed – die Suchvorschläge
+   (Handy) wurden dadurch auf 48 px Höhe gequetscht und verschwanden hinter den
+   Vorschaubildern. */
+.masthead, .pivot-bar { background: transparent; }
+.masthead::before, .pivot-bar::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
   -webkit-backdrop-filter: saturate(1.6) blur(18px); backdrop-filter: saturate(1.6) blur(18px); }
+body.mobile-search .masthead { z-index: 120; }
+body.mobile-search .masthead::before { background: var(--bg); }
+body.mobile-search .suggestions { background: var(--bg); }
+.sugg-fill { display: none; width: 36px; height: 36px; margin-right: -8px; color: var(--text-2); }
+body.mobile-search .sugg-fill { display: inline-flex; }
+body.mobile-search .suggestions li { min-height: 48px; }
 .pivot-item.active { color: var(--text); font-weight: 600; }
 .pivot-item .icon { width: 25px; height: 25px; }
 .pivot-item .avatar, .mini-item .avatar { --s: 26px !important; }

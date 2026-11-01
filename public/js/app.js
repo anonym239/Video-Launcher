@@ -168,10 +168,24 @@ function submitSearch(q) {
 }
 
 export function parseYouTubeLink(q) {
+  q = q.trim();
+  // Auch Links ohne „https://“ erkennen (z. B. „youtube.com/watch?v=…“).
+  if (/^(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//i.test(q)) q = `https://${q}`;
   try {
     const u = new URL(q);
-    if (u.hostname === 'youtu.be') return `/watch?v=${u.pathname.slice(1)}${u.searchParams.get('t') ? `&t=${u.searchParams.get('t')}` : ''}`;
-    if (/(^|\.)youtube\.com$/.test(u.hostname)) return u.pathname + u.search;
+    const host = u.hostname.toLowerCase();
+    const t = u.searchParams.get('t');
+    const watch = (id) => `/watch?v=${encodeURIComponent(id)}${t ? `&t=${encodeURIComponent(t)}` : ''}`;
+    if (host === 'youtu.be') {
+      const id = u.pathname.split('/')[1];
+      return id ? watch(id) : null;
+    }
+    if (/(^|\.)youtube(-nocookie)?\.com$/.test(host)) {
+      // /live/ID, /embed/ID, /v/ID → normale Wiedergabeseite
+      const m = u.pathname.match(/^\/(?:live|embed|v)\/([A-Za-z0-9_-]{11})/);
+      if (m) return watch(m[1]);
+      return u.pathname + u.search;
+    }
   } catch {}
   return null;
 }
@@ -190,12 +204,19 @@ async function showSuggestions(q) {
   if (document.activeElement !== input) return;
   list.innerHTML = '';
   for (const s of data.suggestions || []) {
-    const li = el(html`<li role="option" data-q="${s.text}" class="${s.history ? 'history' : ''}">${raw(icon(s.history ? 'history' : 'search'))}<span>${highlight(s.text, q)}</span>${s.history ? html`<button class="sugg-remove" aria-label="Entfernen">Entfernen</button>` : ''}</li>`);
+    const li = el(html`<li role="option" data-q="${s.text}" class="${s.history ? 'history' : ''}">${raw(icon(s.history ? 'history' : 'search'))}<span>${highlight(s.text, q)}</span>${s.history ? html`<button class="sugg-remove" aria-label="Entfernen">Entfernen</button>` : ''}<button type="button" class="icon-btn sugg-fill" aria-label="In Suchfeld übernehmen">${raw(icon('northWest'))}</button></li>`);
     li.addEventListener('mousedown', (e) => e.preventDefault());
     li.addEventListener('click', async (e) => {
       if (e.target.closest('.sugg-remove')) {
         await api(`/api/suggest?q=${encodeURIComponent(s.text)}`, { method: 'DELETE' }).catch(() => {});
         li.remove();
+        return;
+      }
+      if (e.target.closest('.sugg-fill')) {
+        input.value = s.text + ' ';
+        $('#search-clear').classList.add('visible');
+        input.focus();
+        showSuggestions(input.value);
         return;
       }
       input.value = s.text;
