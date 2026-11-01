@@ -1,4 +1,5 @@
 import { api, el, qs } from '../util.js';
+import { icon } from '../icons.js';
 import { appendItems, infinite, skeletonGrid, chipBar, emptyState } from '../components.js';
 
 export default async function home({ node, signal }) {
@@ -28,7 +29,10 @@ export default async function home({ node, signal }) {
     }
     sk.replaceWith(grid);
     if (!chipsBox.childElementCount && data.chips?.length) {
-      chipsBox.appendChild(chipBar(data.chips, data.chips[0], (c) => load(c).catch(() => {})));
+      const bar = chipBar(data.chips, data.chips[0], (c) => load(c).catch(() => {}));
+      // Wie in der App: Kompass („Entdecken“) vor den Chips.
+      bar.querySelector('.chips')?.prepend(el(`<a class="chip chip-explore" href="/feed/explore" aria-label="Entdecken">${icon('explore')}</a>`));
+      chipsBox.appendChild(bar);
     }
     if (!data.items.length) {
       grid.appendChild(emptyState('Hier ist noch nichts', 'Suche nach Videos oder sieh dir ein paar an – dann werden Empfehlungen angezeigt.', 'search'));

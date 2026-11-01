@@ -47,6 +47,7 @@ function buildMasthead() {
   $('#voice-btn').innerHTML = icon('mic');
   $('#search-toggle').innerHTML = icon('search');
   $('#notif-btn').insertAdjacentHTML('afterbegin', icon('bell'));
+  $('#mh-settings').innerHTML = icon('settings');
   renderAccountButton();
 
   $('#guide-btn').onclick = toggleGuide;
@@ -91,6 +92,11 @@ async function refreshNotifCount() {
     const badge = $('#notif-badge');
     badge.hidden = !count;
     badge.textContent = count > 9 ? '9+' : String(count);
+    const pb = document.querySelector('.pivot-badge');
+    if (pb) {
+      pb.hidden = !count;
+      pb.textContent = count > 9 ? '9+' : String(count);
+    }
   } catch {}
 }
 
@@ -310,11 +316,13 @@ function buildGuide() {
     .map((n) => html`<a class="mini-item" href="${n.href}" data-name="${n.name}">${raw(icon(n.icon, 'base-icon'))}${raw(icon(n.active, 'when-active'))}<span>${n.label}</span></a>`)
     .join('');
 
+  // Untere Leiste wie in der YouTube-App – Shorts bleibt drin.
   $('#pivot-bar').innerHTML = [
     ...NAV,
-    { href: '/feed/you', label: 'Du', icon: 'library', active: 'libraryFilled', name: 'you' }
+    { href: '/notifications', label: 'Benachrichtigungen', icon: 'bell', active: 'bellFilled', name: 'notifications' },
+    { href: '/feed/you', label: 'Mein YouTube', icon: 'library', active: 'libraryFilled', name: 'you' }
   ]
-    .map((n) => html`<a class="pivot-item" href="${n.href}" data-name="${n.name}">${raw(icon(n.icon, 'base-icon'))}${raw(icon(n.active, 'when-active'))}<span>${n.label}</span></a>`)
+    .map((n) => html`<a class="pivot-item" href="${n.href}" data-name="${n.name}">${raw(icon(n.icon, 'base-icon'))}${raw(icon(n.active, 'when-active'))}<span>${n.label}</span>${n.name === 'notifications' ? raw('<span class="pivot-badge" hidden></span>') : ''}</a>`)
     .join('');
   loadGuideSubs();
 }
@@ -609,14 +617,6 @@ async function boot() {
   on('auth', () => (signedIn() ? hideLoginGate() : showLoginGate()));
   if (!signedIn()) showLoginGate();
   startRouter();
-  // Ohne Internet direkt die Downloads öffnen (alles aus dem App-Speicher).
-  if (location.pathname === '/') {
-    api('/api/online')
-      .then((r) => {
-        if (!r.online && location.pathname === '/') go('/feed/downloads', { replace: true });
-      })
-      .catch(() => {});
-  }
   // Erst nach dem ersten Rendern zeigen, sonst schließt die Navigation den Dialog sofort.
   showFirstRunNotice();
 }

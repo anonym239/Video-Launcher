@@ -67,29 +67,84 @@ function playable(info) {
   return !!(sd && (sd.adaptive_formats?.length || sd.formats?.length || sd.hls_manifest_url || sd.dash_manifest_url));
 }
 
+// Mehrere YouTube-Clients versetzt parallel anfragen: Der erste startet sofort,
+// jeder weitere nach kurzem Vorsprung (oder sofort, wenn der vorige scheitert).
+// Die erste brauchbare Antwort gewinnt – das spart bei hängenden oder
+// abgelehnten Clients mehrere Sekunden gegenüber „einer nach dem anderen“.
+const STAGGER_MS = 900;
+
+async function tryClient(yt, id, client) {
+  const info = await yt.getBasicInfo(id, { client });
+  if (!playable(info)) {
+    const reason = info?.playability_status?.reason || info?.playability_status?.status || 'nicht abspielbar';
+    const err = new Error(reason);
+    err.fatal = info?.playability_status?.status === 'LOGIN_REQUIRED' && /privat|private/i.test(reason);
+    throw err;
+  }
+  // Testweise eine URL entschlüsseln – schlägt das fehl, gilt der Client als unbrauchbar.
+  const f = info.streaming_data.adaptive_formats?.[0] || info.streaming_data.formats?.[0];
+  if (f) await f.decipher(yt.session.player);
+  return { info, client, source: 'youtubei' };
+}
+
+/**
+ * Startet Aufgaben versetzt: die erste sofort, jede weitere nach `delay` ms oder
+ * sofort, sobald die vorige scheitert. Liefert das erste erfolgreiche Ergebnis.
+ * Ein Fehler mit `fatal: true` bricht ab (weitere Versuche sind sinnlos).
+ */
+export function raceStaggered(tasks, delay) {
+  return new Promise((resolve, reject) => {
+    let next = 0;
+    let running = 0;
+    let done = false;
+    let lastErr = null;
+    let timer = null;
+    const finish = () => {
+      if (done || running || next < tasks.length) return;
+      done = true;
+      reject(lastErr || new Error('Keine Aufgabe'));
+    };
+    const launch = () => {
+      clearTimeout(timer);
+      if (done || next >= tasks.length) return;
+      const task = tasks[next++];
+      running++;
+      Promise.resolve()
+        .then(task)
+        .then(
+          (r) => {
+            running--;
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            resolve(r);
+          },
+          (e) => {
+            running--;
+            if (done) return;
+            lastErr = e;
+            if (e?.fatal) next = tasks.length;
+            if (next < tasks.length) launch();
+            else finish();
+          }
+        );
+      if (next < tasks.length) timer = setTimeout(launch, delay);
+    };
+    if (!tasks.length) return reject(new Error('Keine Aufgabe'));
+    launch();
+  });
+}
+
 async function viaYoutubei(id) {
   const yt = await getYT();
   const clients = store.settings.clients?.length ? store.settings.clients : ['ANDROID_VR', 'TV', 'IOS', 'WEB'];
-  let lastReason = '';
-  for (const client of clients) {
-    try {
-      const info = await yt.getBasicInfo(id, { client });
-      if (!playable(info)) {
-        lastReason = info?.playability_status?.reason || info?.playability_status?.status || 'nicht abspielbar';
-        if (info?.playability_status?.status === 'LOGIN_REQUIRED' && /privat|private/i.test(lastReason)) break;
-        continue;
-      }
-      // Testweise eine URL entschlüsseln – schlägt das fehl, nächsten Client probieren.
-      const f = info.streaming_data.adaptive_formats?.[0] || info.streaming_data.formats?.[0];
-      if (f) await f.decipher(yt.session.player);
-      return { info, client, source: 'youtubei' };
-    } catch (e) {
-      lastReason = e?.message || String(e);
-    }
+  try {
+    return await raceStaggered(clients.map((c) => () => tryClient(yt, id, c)), STAGGER_MS);
+  } catch (e) {
+    const err = new Error(e?.message || 'Video nicht verfügbar');
+    err.status = 403;
+    throw err;
   }
-  const err = new Error(lastReason || 'Video nicht verfügbar');
-  err.status = 403;
-  throw err;
 }
 
 function viaYtdlp(id) {
@@ -113,9 +168,19 @@ function viaYtdlp(id) {
   });
 }
 
-export async function resolveVideo(id, { fresh = false } = {}) {
+const inflight = new Map(); // id -> laufende Auflösung (gleichzeitige Anfragen teilen sie)
+
+export function resolveVideo(id, { fresh = false } = {}) {
   const hit = cache.get(id);
-  if (!fresh && hit && Date.now() - hit.at < CACHE_MS) return hit;
+  if (!fresh && hit && Date.now() - hit.at < CACHE_MS) return Promise.resolve(hit);
+  const key = fresh ? `${id}#fresh` : id;
+  if (!inflight.has(key)) {
+    inflight.set(key, doResolve(id).finally(() => inflight.delete(key)));
+  }
+  return inflight.get(key);
+}
+
+async function doResolve(id) {
   let res;
   try {
     res = await viaYoutubei(id);
@@ -242,13 +307,24 @@ function addParam(url, k, v) {
   }
 }
 
+const mpdCache = new WeakMap(); // aufgelöstes Video -> fertiges Manifest
+
 export async function dashManifest(id) {
   const r = await resolveVideo(id);
   if (r.source !== 'youtubei') throw Object.assign(new Error('Kein DASH verfügbar'), { status: 404 });
-  const mpd = await r.info.toDash({
-    url_transformer: (url) => new URL(PROXY_BASE + vp(url.toString(), `&vid=${id}`))
-  });
-  return mpd.split(PROXY_BASE).join('');
+  if (!mpdCache.has(r)) {
+    mpdCache.set(
+      r,
+      r.info
+        .toDash({ url_transformer: (url) => new URL(PROXY_BASE + vp(url.toString(), `&vid=${id}`)) })
+        .then((mpd) => mpd.split(PROXY_BASE).join(''))
+        .catch((e) => {
+          mpdCache.delete(r);
+          throw e;
+        })
+    );
+  }
+  return mpdCache.get(r);
 }
 
 // HLS-Playlists umschreiben, damit auch Segmente über den Proxy laufen.
