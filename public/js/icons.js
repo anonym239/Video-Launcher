@@ -127,10 +127,11 @@ const OWN = {
     '<g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.2 16.8v-5.4a5.8 5.8 0 0 1 11.6 0v5.4l1.7 1.9h-15z"/><path d="M10 21a2.1 2.1 0 0 0 4 0"/></g>',
   bellFilled:
     '<path fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" d="M6.2 16.8v-5.4a5.8 5.8 0 0 1 11.6 0v5.4l1.7 1.9h-15z"/><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M10 21a2.1 2.1 0 0 0 4 0"/>',
+  // Shorts in der Leiste = Shorts-Logo (Umriss), ausgewählt gefüllt.
   shorts:
-    '<g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="7.2" width="11.2" height="14" rx="2.6"/><path d="M8.6 3.4h7.6a3.3 3.3 0 0 1 3.3 3.3v9.8"/><path d="M8.6 11v6.2l4.8-3.1z"/></g>',
+    '<path d="m18.931 9.99-1.441-.601 1.717-.913a4.48 4.48 0 0 0 1.874-6.078 4.506 4.506 0 0 0-6.09-1.874L4.792 5.929a4.504 4.504 0 0 0-2.402 4.193 4.521 4.521 0 0 0 2.666 3.904c.036.012 1.442.6 1.442.6l-1.706.901a4.51 4.51 0 0 0-2.369 3.967A4.528 4.528 0 0 0 6.93 24c.725 0 1.437-.174 2.08-.508l10.21-5.406a4.494 4.494 0 0 0 2.39-4.192 4.525 4.525 0 0 0-2.678-3.904ZM9.597 15.19V8.824l6.007 3.184z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" transform="translate(1.3 1.3) scale(0.89)"/>',
   shortsFilled:
-    '<path d="M8.6 3.4h7.6a3.3 3.3 0 0 1 3.3 3.3v9.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path fill="currentColor" fill-rule="evenodd" d="M7.1 6.4h6a3.4 3.4 0 0 1 3.4 3.4v8.8a3.4 3.4 0 0 1-3.4 3.4h-6a3.4 3.4 0 0 1-3.4-3.4V9.8a3.4 3.4 0 0 1 3.4-3.4zm1.5 4.6v6.2l4.8-3.1z"/>',
+    '<path fill-rule="evenodd" d="m18.931 9.99-1.441-.601 1.717-.913a4.48 4.48 0 0 0 1.874-6.078 4.506 4.506 0 0 0-6.09-1.874L4.792 5.929a4.504 4.504 0 0 0-2.402 4.193 4.521 4.521 0 0 0 2.666 3.904c.036.012 1.442.6 1.442.6l-1.706.901a4.51 4.51 0 0 0-2.369 3.967A4.528 4.528 0 0 0 6.93 24c.725 0 1.437-.174 2.08-.508l10.21-5.406a4.494 4.494 0 0 0 2.39-4.192 4.525 4.525 0 0 0-2.678-3.904ZM9.597 15.19V8.824l6.007 3.184z" transform="translate(.6 .6) scale(.95)"/>',
   like:
     '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M7.2 20.2V10.6l3.6-6.1c.5-.8 1.6-1 2.3-.4.6.5.8 1.3.6 2l-.9 3.6h5.1a2.2 2.2 0 0 1 2.1 2.7l-1.4 6.1a2.2 2.2 0 0 1-2.1 1.7zM7.2 10.6H5.1a1.6 1.6 0 0 0-1.6 1.6v6.4a1.6 1.6 0 0 0 1.6 1.6h2.1"/>',
   likeFilled:
