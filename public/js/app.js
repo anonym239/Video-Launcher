@@ -395,105 +395,89 @@ async function logout() {
   }
 }
 
-let authPoll = null;
+const G_LOGO = '<svg viewBox="0 0 48 48" class="g-logo" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
 
-export function loginDialog() {
+// Anmeldung: In der Android-App öffnet „Mit Google anmelden“ die offizielle
+// Google-Anmeldeseite (LoginActivity) und übergibt danach die YouTube-Sitzung an den
+// Server. Im Browser (z. B. Termux) bleibt die Anmeldung mit Browser-Cookies.
+// (Die frühere Geräte-Code-Anmeldung über google.com/device lässt YouTube nicht mehr zu.)
+const hasNativeLogin = () => typeof window.VLAndroid?.googleLogin === 'function';
+
+function loginBody({ onDone }) {
+  const native = hasNativeLogin();
   const body = el(html`<div class="login">
-    <div class="login-hero">${raw(LOGO)}<p>Melde dich mit deinem Google-Konto an, um deine Abos, Playlists, „Mag ich“-Bewertungen, den Verlauf und Empfehlungen zu nutzen – weiterhin ohne Werbung.</p></div>
+    <div class="login-hero">${raw(LOGO)}<h2>Anmelden, um fortzufahren</h2><p>Melde dich mit deinem Google-Konto an, um Video Launcher zu nutzen: Abos, Playlists, „Mag ich“, Verlauf und Empfehlungen – ohne Werbung.</p></div>
     <div class="login-step login-start">
-      <button class="btn btn-google">${raw('<svg viewBox="0 0 48 48" class="g-logo" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>')}<span>Mit Google anmelden</span></button>
-      <p class="muted small">Du meldest dich direkt auf der offiziellen Google-Seite an. Dein Passwort wird nie in diese App eingegeben – auf dem Handy wird nur der Zugangsschlüssel gespeichert.</p>
+      ${native ? html`<button class="btn btn-google">${raw(G_LOGO)}<span>Mit Google anmelden</span></button>
+      <p class="muted small">Du meldest dich direkt auf der offiziellen Google-Seite an. Dein Passwort wird nie an diese App gegeben – auf dem Handy wird nur die YouTube-Sitzung gespeichert.</p>` : ''}
     </div>
-    <div class="login-step login-code" hidden>
-      <p>1. Öffne <a class="login-url" target="_blank" rel="noopener" href="https://www.google.com/device">google.com/device</a> (auf diesem oder einem anderen Gerät)</p>
-      <p>2. Gib diesen Code ein:</p>
-      <div class="login-codebox"><code class="login-code-text"></code><button class="btn btn-text login-copy">${raw(icon('link'))} Kopieren</button></div>
-      <p>3. Wähle dein Konto und bestätige den Zugriff.</p>
-      <div class="login-wait"><div class="spinner"></div><span>Warte auf Bestätigung…</span></div>
-    </div>
-    <div class="login-step login-error" hidden><p class="error-text"></p><button class="btn btn-outline login-retry">Erneut versuchen</button></div>
-    <details class="login-cookie">
-      <summary>Alternative: Mit Browser-Cookies anmelden</summary>
-      <p class="muted small">Melde dich in einem Browser auf youtube.com an, kopiere den kompletten <code>Cookie</code>-Header einer Anfrage (Entwicklertools → Netzwerk) und füge ihn hier ein. Die Cookies bleiben nur auf deinem Handy.</p>
+    <div class="login-step login-wait-step" hidden><div class="login-wait"><div class="spinner"></div><span>Anmeldung wird abgeschlossen…</span></div></div>
+    <details class="login-cookie" ${native ? '' : raw('open')}>
+      <summary>${native ? 'Alternative: Mit Browser-Cookies anmelden' : 'Mit Browser-Cookies anmelden'}</summary>
+      <p class="muted small">Melde dich in einem Browser auf youtube.com an, kopiere den kompletten <code>Cookie</code>-Header einer Anfrage (Entwicklertools → Netzwerk) und füge ihn hier ein. Die Cookies bleiben nur auf deinem Gerät.</p>
       <textarea class="cookie-input" rows="4" placeholder="SID=…; HSID=…; SSID=…; APISID=…; SAPISID=…; …"></textarea>
       <button class="btn btn-blue cookie-save">Mit Cookies anmelden</button>
     </details>
   </div>`);
-  const showStep = (name) => {
-    body.querySelectorAll('.login-step').forEach((s) => (s.hidden = !s.classList.contains(name)));
-  };
-  const showCode = (a) => {
-    showStep('login-code');
-    body.querySelector('.login-code-text').textContent = a.code;
-    const link = body.querySelector('.login-url');
-    link.href = a.url || 'https://www.google.com/device';
-    link.textContent = (a.url || 'https://www.google.com/device').replace(/^https?:\/\/(www\.)?/, '');
-  };
-  const startPoll = () => {
-    clearInterval(authPoll);
-    authPoll = setInterval(async () => {
-      try {
-        const a = await api('/api/auth/status');
-        if (a.status === 'signed_in') {
-          clearInterval(authPoll);
-          setAuth(a);
-          closeOverlay();
-          toast('Angemeldet' + (a.account?.name ? ` als ${a.account.name}` : ''));
-        } else if (a.status === 'error') {
-          clearInterval(authPoll);
-          showStep('login-error');
-          body.querySelector('.error-text').textContent = a.error || 'Anmeldung fehlgeschlagen.';
-        }
-      } catch {}
-    }, 2500);
-  };
-  const start = async () => {
-    const btn = body.querySelector('.btn-google');
-    btn.disabled = true;
-    btn.classList.add('loading');
+  const showStep = (name) => body.querySelectorAll('.login-step').forEach((x) => (x.hidden = !x.classList.contains(name)));
+  const finish = async () => {
     try {
-      const a = await api('/api/auth/oauth', { method: 'POST' });
-      showCode(a);
-      startPoll();
-    } catch (e) {
-      showStep('login-error');
-      body.querySelector('.error-text').textContent = `Anmeldung konnte nicht gestartet werden: ${e.message}`;
-    } finally {
-      btn.disabled = false;
-      btn.classList.remove('loading');
-    }
-  };
-  body.querySelector('.btn-google').onclick = start;
-  body.querySelector('.login-retry').onclick = () => {
+      const a = await api('/api/auth/status');
+      if (a.status === 'signed_in') {
+        setAuth(a);
+        toast('Angemeldet' + (a.account?.name ? ` als ${a.account.name}` : ''));
+        onDone?.();
+        return;
+      }
+    } catch {}
     showStep('login-start');
-    start();
   };
-  body.querySelector('.login-copy').onclick = () => {
-    navigator.clipboard?.writeText(body.querySelector('.login-code-text').textContent).then(() => toast('Code kopiert'));
-  };
+  const btn = body.querySelector('.btn-google');
+  if (btn) {
+    btn.onclick = () => {
+      const handler = (e) => {
+        window.removeEventListener('vl-login-done', handler);
+        if (e.detail) {
+          showStep('login-wait-step');
+          finish();
+        }
+      };
+      window.addEventListener('vl-login-done', handler);
+      window.VLAndroid.googleLogin();
+    };
+  }
   body.querySelector('.cookie-save').onclick = async () => {
     try {
       const a = await api('/api/auth/cookie', { method: 'POST', body: { cookie: body.querySelector('.cookie-input').value } });
       setAuth(a);
-      closeOverlay();
-      toast('Mit Cookies angemeldet');
+      toast('Angemeldet');
+      onDone?.();
     } catch (e) {
       toast(e.message);
     }
   };
-  if (state.auth.status === 'pending' && state.auth.code) {
-    showCode(state.auth);
-    startPoll();
-  }
-  openDialog({
-    title: 'Anmelden',
-    body,
-    className: 'login-dialog',
-    onClose: () => {
-      clearInterval(authPoll);
-      if (state.auth.status !== 'signed_in') api('/api/auth/cancel', { method: 'POST' }).catch(() => {});
-    }
-  });
+  return body;
+}
+
+export function loginDialog() {
+  if (!signedIn()) return showLoginGate();
+  openDialog({ title: 'Anmelden', body: loginBody({ onDone: () => closeOverlay() }), className: 'login-dialog' });
+}
+
+// Ohne Anmeldung geht nichts: bildschirmfüllende Anmeldeseite.
+function showLoginGate() {
+  if (signedIn()) return hideLoginGate();
+  if (document.querySelector('.login-gate')) return;
+  player.video?.pause();
+  const gate = el('<div class="login-gate" role="dialog" aria-modal="true" aria-label="Anmelden"></div>');
+  gate.appendChild(loginBody({ onDone: hideLoginGate }));
+  document.body.appendChild(gate);
+  document.body.classList.add('gated');
+}
+
+function hideLoginGate() {
+  document.querySelector('.login-gate')?.remove();
+  document.body.classList.remove('gated');
 }
 
 // ---- Miniplayer --------------------------------------------------------------------------
@@ -615,6 +599,8 @@ async function boot() {
   }
   renderAccountButton();
   setInterval(() => signedIn() && refreshNotifCount(), 5 * 60 * 1000);
+  on('auth', () => (signedIn() ? hideLoginGate() : showLoginGate()));
+  if (!signedIn()) showLoginGate();
   startRouter();
   // Erst nach dem ersten Rendern zeigen, sonst schließt die Navigation den Dialog sofort.
   showFirstRunNotice();

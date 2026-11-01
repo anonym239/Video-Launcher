@@ -430,6 +430,9 @@ code { font-family: ui-monospace, Menlo, monospace; font-size: 0.92em; }
 /* Regale (Shelves) */
 .shelf { position: relative; padding: 24px 0 8px; border-top: 4px solid transparent; }
 .rich-grid > .shelf { border-top: 1px solid var(--border); margin-top: -16px; }
+/* Regale (z. B. „Collabs“ auf Kanalseiten) gehen immer über die volle Breite –
+   sonst landeten sie bei 2 Spalten nur in der linken Hälfte. */
+.rich-grid > .shelf, .rich-grid > .shelf-more, .rich-grid > .section-header { grid-column: 1 / -1; }
 .shelf-title { display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 700; margin-bottom: 16px; }
 .shorts-red { fill: var(--red); width: 28px; height: 28px; }
 .shelf-items.grid { display: grid; gap: 40px 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
@@ -634,6 +637,10 @@ select option { background: var(--bg-menu); color: var(--text); }
 
 /* ---- Login ------------------------------------------------------------------------ */
 .login-dialog { width: min(480px, calc(100vw - 32px)); }
+.login-gate { position: fixed; inset: 0; z-index: 2000; background: var(--bg); overflow-y: auto; display: flex; align-items: center; justify-content: center; padding: 32px 20px calc(32px + env(safe-area-inset-bottom)); }
+.login-gate .login { width: min(440px, 100%); }
+.login-hero h2 { margin: 0; color: var(--text); font-size: 22px; }
+body.gated { overflow: hidden; }
 .login-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px; padding: 8px 0 20px; color: var(--text-2); }
 .login-hero svg { width: 56px; height: 56px; }
 .login-step { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
@@ -891,6 +898,9 @@ select option { background: var(--bg-menu); color: var(--text); }
 .p-controls { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
 .player.controls-visible .p-controls, .player[data-state='paused'] .p-controls, .player[data-state='ended'] .p-controls, .player.scrubbing .p-controls, .player.menu-open .p-controls { opacity: 1; }
 .player.controls-visible .p-controls *, .player[data-state='paused'] .p-controls *, .player[data-state='ended'] .p-controls *, .player.scrubbing .p-controls *, .player.menu-open .p-controls * { pointer-events: auto; }
+/* Reine Anzeige-Elemente dürfen nie Klicks abfangen – die Heatmap lag auf dem Handy
+   über dem Untertitel-Knopf, ein Tipp darauf hat dann vorgespult. */
+.player .p-controls .p-heat, .player .p-controls .p-heat *, .player .p-controls .p-hover-preview, .player .p-controls .p-hover-preview *, .player .p-controls .p-scrubber { pointer-events: none !important; }
 .p-controls::before, .p-controls::after { content: ''; position: absolute; left: 0; right: 0; pointer-events: none !important; z-index: -1; }
 .p-controls::before { top: 0; height: 100px; background: linear-gradient(rgba(0, 0, 0, 0.55), transparent); }
 .p-controls::after { bottom: 0; height: 120px; background: linear-gradient(transparent, rgba(0, 0, 0, 0.75)); }
@@ -1071,7 +1081,7 @@ select option { background: var(--bg-menu); color: var(--text); }
 .short-channel { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; min-width: 0; }
 .sc-link { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; min-width: 0; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); }
 .sc-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sc-link .avatar { --s: 34px !important; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.85); }
+.sc-link .avatar { --s: 34px !important; }
 .short-channel .sub-btn { flex: none; height: 32px; padding: 0 14px; font-size: 13px; font-weight: 600; background: #fff; color: #0f0f0f; }
 .short-channel .sub-btn.subscribed { background: rgba(255, 255, 255, 0.18); color: #fff; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
 .short-channel .sub-btn .icon { display: none; }

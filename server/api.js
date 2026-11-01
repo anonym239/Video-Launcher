@@ -845,6 +845,31 @@ function shortMeta(id) {
   return promise;
 }
 
+// Profilbild eines Kanals (für Shorts ohne Bild im Overlay), mit Zwischenspeicher.
+const avatarCache = new Map(); // channelId -> Promise<string>
+function channelAvatar(id) {
+  if (!avatarCache.has(id)) {
+    const p = (async () => {
+      const yt = await getYT();
+      const c = await Promise.race([yt.getChannel(id), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000))]);
+      const h = c.header || {};
+      return (
+        thumb(c.metadata?.avatar, 88) ||
+        thumb(h.author?.thumbnails, 88) ||
+        thumb(findNode(h, 'DecoratedAvatarView')?.avatar, 88) ||
+        thumb(findNode(h, 'AvatarView')?.image, 88) ||
+        ''
+      );
+    })().catch(() => {
+      setTimeout(() => avatarCache.delete(id), 60_000);
+      return '';
+    });
+    avatarCache.set(id, p);
+    if (avatarCache.size > 500) avatarCache.delete(avatarCache.keys().next().value);
+  }
+  return avatarCache.get(id);
+}
+
 // Lädt Infos und Stream-Adressen der nächsten Shorts schon im Hintergrund.
 function prefetchShorts(ids) {
   for (const id of ids) {
@@ -860,6 +885,9 @@ async function loadShortMeta(id) {
   const header = findNode(info.player_overlays, 'ReelPlayerHeader');
   const overlay = info.player_overlays || {};
   let avatar = thumb(header?.channel_thumbnail, 88);
+  // Neueres Shorts-Layout: Profilbild steckt in einem Avatar-View-Model.
+  if (!avatar) avatar = thumb(findNode(overlay, 'DecoratedAvatarView')?.avatar, 88) || thumb(findNode(overlay, 'AvatarView')?.image, 88);
+  if (!avatar && b.channel_id) avatar = await channelAvatar(b.channel_id);
   let commentCount = '';
   const commentsBtn = findNode(overlay, 'ButtonView', (n) => /comment|kommentar/i.test(n.accessibility_text || n.icon_name || ''));
   if (commentsBtn) commentCount = commentsBtn.title || '';

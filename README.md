@@ -36,9 +36,7 @@ In der App:
 - **Miniplayer**: Beim Verlassen eines Videos läuft es unten weiter.
 - **Shorts**: vertikal wischen, Endlos-Feed, Schleife, Liken, Kommentare, Teilen, Abonnieren
 - **Kanäle**: Banner, Abonnieren (inkl. Glocke), Tabs für Startseite, Videos, Shorts, Live, Playlists und Beiträge, Kanalsuche und Kanalinfo
-- **Abos, Verlauf, Playlists, Später ansehen, Mag ich**:
-  - mit Anmeldung über dein YouTube-Konto
-  - ohne Anmeldung lokal auf dem Handy; den Abo-Feed holt die App dann über die öffentlichen RSS-Feeds der Kanäle
+- **Abos, Verlauf, Playlists, Später ansehen, Mag ich** aus deinem YouTube-Konto (Anmeldung ist Pflicht)
 - **Benachrichtigungen** (wenn angemeldet), Hashtag-Seiten, Trends
 - „Kein Interesse“ und „Kanal nicht empfehlen“, Wiedergabeverlauf pausieren oder löschen, Backup exportieren und importieren
 - Dunkles, helles oder Gerätedesign; Layout für Handy, Tablet und Desktop
@@ -69,15 +67,15 @@ Alle Daten (Abos, Verlauf, Playlists, Login-Schlüssel) liegen im Ordner `data/`
 
 ## Mit dem eigenen Konto anmelden
 
-Oben rechts auf **Anmelden** tippen und **Mit Google anmelden** wählen. Es erscheint ein Code:
+Beim Start erscheint die Anmeldeseite – ohne Anmeldung lässt sich die App nicht benutzen.
 
-1. Öffne google.com/device (auf dem Handy oder einem anderen Gerät).
-2. Gib den Code ein und bestätige mit deinem Google-Konto, ganz normal auf der offiziellen Google-Seite.
-3. Fertig. Abos, Playlists, „Mag ich“, Verlauf, Kommentare und Empfehlungen kommen jetzt aus deinem Konto.
+**Android-App:** **Mit Google anmelden** tippen. Es öffnet sich die offizielle Google-Anmeldeseite. Nach der Anmeldung übernimmt die App die YouTube-Sitzung automatisch. Fertig: Abos, Playlists, „Mag ich“, Verlauf, Kommentare und Empfehlungen kommen jetzt aus deinem Konto.
 
-Dein Passwort wird **nie** in diese App eingegeben. Auf dem Handy wird nur der Zugangsschlüssel gespeichert. „Abmelden“ löscht ihn wieder.
+Dein Passwort wird **nie** an diese App gegeben – es wird nur auf der Google-Seite eingegeben. Auf dem Handy wird nur die YouTube-Sitzung gespeichert. „Abmelden“ löscht sie wieder.
 
-Alternative für Fortgeschrittene: Unter *Anmelden → Mit Browser-Cookies anmelden* den Cookie-Header von youtube.com einfügen.
+**Im Browser (Termux):** Unter *Mit Browser-Cookies anmelden* den Cookie-Header von youtube.com einfügen.
+
+> Warum nicht über GmsCore/microG-Konten? GmsCore gibt YouTube-Zugangsschlüssel nur an Apps heraus, die sich als die offizielle YouTube-App ausweisen (so funktioniert ReVanced: Es *ist* die gepatchte YouTube-App). Eine eigene App bekommt dort keinen gültigen Schlüssel. Die frühere Anmeldung per Code über google.com/device lässt YouTube nicht mehr zu – deshalb schlug sie immer fehl.
 
 ## Wenn ein Video nicht lädt
 

@@ -150,14 +150,14 @@ export async function streamsFor(id) {
   for (const f of sd.formats || []) {
     try {
       const url = await f.decipher(yt.session.player);
-      if (url) progressive.push({ itag: f.itag, label: qualityLabel(f), mime: f.mime_type, url: vp(url) });
+      if (url) progressive.push({ itag: f.itag, label: qualityLabel(f), mime: f.mime_type, url: vp(url, `&vid=${id}`) });
     } catch {}
   }
   const audio = [];
   for (const f of (sd.adaptive_formats || []).filter((x) => x.has_audio && !x.has_video && /mp4/.test(x.mime_type))) {
     try {
       const url = await f.decipher(yt.session.player);
-      if (url) audio.push({ itag: f.itag, label: `${Math.round((f.bitrate || 0) / 1000)} kbit/s`, mime: f.mime_type, url: vp(url) });
+      if (url) audio.push({ itag: f.itag, label: `${Math.round((f.bitrate || 0) / 1000)} kbit/s`, mime: f.mime_type, url: vp(url, `&vid=${id}`) });
     } catch {}
   }
 
@@ -246,7 +246,7 @@ export async function dashManifest(id) {
   const r = await resolveVideo(id);
   if (r.source !== 'youtubei') throw Object.assign(new Error('Kein DASH verfügbar'), { status: 404 });
   const mpd = await r.info.toDash({
-    url_transformer: (url) => new URL(PROXY_BASE + vp(url.toString()))
+    url_transformer: (url) => new URL(PROXY_BASE + vp(url.toString(), `&vid=${id}`))
   });
   return mpd.split(PROXY_BASE).join('');
 }
@@ -273,6 +273,74 @@ export function rewriteM3U8(body, baseUrl) {
     .join('\n');
 }
 
+// ---- Abgelaufene Stream-Links automatisch erneuern ---------------------------------
+// googlevideo-Links laufen ab bzw. werden nach einiger Zeit mit 403 abgelehnt. Früher
+// hat der Player dann das ganze Video neu geladen (kurzer Aussetzer alle paar
+// Sekunden). Jetzt holt der Server still einen frischen Link für dasselbe Format
+// (gleiche itag + Tonspur) und liefert die angefragten Bytes einfach weiter.
+const remap = new Map(); // `${vid}|${itag}|${xtags}` -> { url, at }
+const refreshing = new Map(); // vid -> Promise
+
+function formatKey(vid, url) {
+  try {
+    const u = new URL(url);
+    return `${vid}|${u.searchParams.get('itag') || ''}|${u.searchParams.get('xtags') || ''}`;
+  } catch {
+    return null;
+  }
+}
+
+export async function freshUrlFor(vid, oldUrl) {
+  const key = formatKey(vid, oldUrl);
+  if (!key) return null;
+  const known = remap.get(key);
+  // Kürzlich erneuert → diesen Link verwenden statt YouTube erneut zu fragen.
+  if (known && known.url !== oldUrl && Date.now() - known.at < 30_000) return known.url;
+  if (!refreshing.has(vid)) {
+    refreshing.set(vid, resolveVideo(vid, { fresh: true }).finally(() => setTimeout(() => refreshing.delete(vid), 5000)));
+  }
+  let r;
+  try {
+    r = await refreshing.get(vid);
+  } catch {
+    return null;
+  }
+  if (r.source !== 'youtubei') return null;
+  const [, itag, xtags] = key.split('|');
+  const sd = r.info.streaming_data || {};
+  const all = [...(sd.adaptive_formats || []), ...(sd.formats || [])];
+  const cands = all.filter((f) => String(f.itag) === itag);
+  const f = cands.find((x) => (x.xtags || '') === xtags) || cands.find((x) => (x.url || '').includes(xtags)) || cands[0];
+  if (!f) return null;
+  try {
+    const yt = await getYT();
+    const url = await f.decipher(yt.session.player);
+    if (!url) return null;
+    remap.set(key, { url, at: Date.now() });
+    if (remap.size > 500) remap.delete(remap.keys().next().value);
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchUpstream(target, range, signal) {
+  let url = target;
+  let upstream;
+  // Manuelle Weiterleitungen, damit jedes Ziel geprüft wird.
+  for (let i = 0; i < 5; i++) {
+    upstream = await fetch(url, { headers: upstreamHeaders(url, range), redirect: 'manual', signal });
+    if (upstream.status >= 300 && upstream.status < 400 && upstream.headers.get('location')) {
+      const next = new URL(upstream.headers.get('location'), url).href;
+      if (!isAllowedUpstream(next)) throw new Error('Weiterleitung auf unerlaubten Host');
+      url = next;
+      continue;
+    }
+    break;
+  }
+  return { upstream, url };
+}
+
 const PASS_HEADERS = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'last-modified', 'etag'];
 
 // /vp?u=<googlevideo-URL> – leitet Bytes inkl. Range-Anfragen durch.
@@ -286,17 +354,17 @@ export async function proxy(req, res, query) {
   req.on('close', () => ctrl.abort());
   let upstream;
   let url = target;
+  const vid = query.get('vid');
   try {
-    // Manuelle Weiterleitungen, damit jedes Ziel geprüft wird.
-    for (let i = 0; i < 5; i++) {
-      upstream = await fetch(url, { headers: upstreamHeaders(url, req.headers.range), redirect: 'manual', signal: ctrl.signal });
-      if (upstream.status >= 300 && upstream.status < 400 && upstream.headers.get('location')) {
-        const next = new URL(upstream.headers.get('location'), url).href;
-        if (!isAllowedUpstream(next)) throw new Error('Weiterleitung auf unerlaubten Host');
-        url = next;
-        continue;
-      }
-      break;
+    // Schon einmal erneuert? Dann gleich den frischen Link nehmen.
+    const key = vid && formatKey(vid, target);
+    const known = key && remap.get(key);
+    if (known && Date.now() - known.at < 5 * 60 * 60 * 1000) url = known.url;
+    ({ upstream, url } = await fetchUpstream(url, req.headers.range, ctrl.signal));
+    if ((upstream.status === 403 || upstream.status === 410) && vid && /^[A-Za-z0-9_-]{11}$/.test(vid)) {
+      upstream.body?.cancel().catch(() => {});
+      const fresh = await freshUrlFor(vid, url);
+      if (fresh && !ctrl.signal.aborted) ({ upstream, url } = await fetchUpstream(fresh, req.headers.range, ctrl.signal));
     }
   } catch (e) {
     if (ctrl.signal.aborted) return;

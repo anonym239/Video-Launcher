@@ -351,6 +351,16 @@ public class MainActivity extends Activity {
         else moveTaskToBack(true);
     }
 
+    private static final int REQ_LOGIN = 42;
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_LOGIN) {
+            web.evaluateJavascript("window.dispatchEvent(new CustomEvent('vl-login-done', { detail: " + (resultCode == RESULT_OK) + " }))", null);
+        }
+    }
+
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
@@ -372,6 +382,12 @@ public class MainActivity extends Activity {
                 if (isPlaying) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             });
+        }
+
+        /** Öffnet die Google-Anmeldung (LoginActivity). */
+        @JavascriptInterface
+        public void googleLogin() {
+            ui.post(() -> startActivityForResult(new Intent(MainActivity.this, LoginActivity.class), REQ_LOGIN));
         }
 
         @JavascriptInterface
