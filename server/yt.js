@@ -22,6 +22,17 @@ export const authState = {
   account: null
 };
 
+// Gespeicherte Anmeldung sofort übernehmen – auch ohne Internet (Offline-Modus)
+// gilt man als angemeldet, sonst würde die Anmeldeseite die Downloads verdecken.
+{
+  const cfg = auth.data || {};
+  if ((cfg.method === 'cookie' && cfg.cookie) || (cfg.method === 'oauth' && cfg.tokens)) {
+    authState.status = 'signed_in';
+    authState.method = cfg.method;
+    authState.account = cfg.account || null;
+  }
+}
+
 function notify() {
   for (const fn of listeners) fn(authState);
 }
@@ -142,6 +153,11 @@ async function loadAccount(inst) {
     } catch {}
   }
   authState.account = account || authState.account || { name: 'Google-Konto', handle: '', photo: '', channelId: '' };
+  // Für den Offline-Start merken (Name/Bild im Kopf).
+  if (account && auth.data?.method) {
+    auth.data.account = account;
+    auth.save();
+  }
   notify();
 }
 
@@ -156,9 +172,25 @@ export function getYT() {
   return current;
 }
 
+// Zweite Sitzung OHNE Anmeldung – nur für Video-Streams und Downloads.
+// Mit Login-Cookies lehnen die schnellen App-Clients (ANDROID_VR, iOS …) Anfragen
+// oft ab oder liefern Links, die beim Laden scheitern. Streams brauchen keinen
+// Login; die angemeldete Sitzung dient nur als Rückfall (z. B. Altersfreigabe).
+let anon = null;
+export function getStreamYT() {
+  if (!anon) {
+    anon = Innertube.create(baseOptions()).catch((e) => {
+      anon = null;
+      throw e;
+    });
+  }
+  return anon;
+}
+
 // Nach Änderungen an Sprache/Region/Login die Sitzung neu aufbauen.
 export function resetYT() {
   current = null;
+  anon = null;
   return getYT();
 }
 

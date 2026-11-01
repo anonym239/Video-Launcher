@@ -8,7 +8,8 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { routes, httpError, warmHome } from './api.js';
 import { proxy, download } from './stream.js';
-import { getYT } from './yt.js';
+import { serveOffline } from './offline.js';
+import { getYT, getStreamYT } from './yt.js';
 import { store } from './store.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -126,6 +127,7 @@ async function handle(req, res) {
   const { pathname } = url;
 
   if (pathname === '/vp') return proxy(req, res, url.searchParams);
+  if (pathname.startsWith('/offline/')) return serveOffline(req, res, pathname.slice('/offline/'.length));
   const dl = pathname.match(/^\/dl\/([\w-]{11})$/);
   if (dl) {
     return download(req, res, dl[1], url.searchParams).catch((e) => {
@@ -210,6 +212,7 @@ if (isMain) {
     if (LAN) for (const ip of lanAddresses()) console.log(`    Im WLAN:           http://${ip}:${PORT}`);
     console.log('    Beenden mit Strg+C\n');
     // Sitzung schon vorab aufbauen, damit die erste Seite schneller lädt.
+    getStreamYT().catch(() => {}); // Stream-Sitzung parallel vorbereiten
     getYT()
       .then(() => warmHome())
       .catch((e) => console.warn('[yt] Sitzung konnte nicht erstellt werden:', e.message));

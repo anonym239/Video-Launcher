@@ -9,4 +9,8 @@
     <string name="copy_report">Fehlerbericht kopieren</string>
     <string name="copied">Kopiert</string>
     <string name="retry">Erneut versuchen</string>
+    <string name="login_title">Mit Google anmelden</string>
+    <string name="cancel">Abbrechen</string>
+    <string name="login_ok">Angemeldet</string>
+    <string name="login_failed">Anmeldung fehlgeschlagen: %1$s</string>
 </resources>

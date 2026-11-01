@@ -3,7 +3,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { Constants } from 'youtubei.js';
-import { getYT } from './yt.js';
+import { getYT, getStreamYT, isSignedIn } from './yt.js';
 import { store } from './store.js';
 import { thumb, txt } from './normalize.js';
 
@@ -67,29 +67,101 @@ function playable(info) {
   return !!(sd && (sd.adaptive_formats?.length || sd.formats?.length || sd.hls_manifest_url || sd.dash_manifest_url));
 }
 
-async function viaYoutubei(id) {
-  const yt = await getYT();
-  const clients = store.settings.clients?.length ? store.settings.clients : ['ANDROID_VR', 'TV', 'IOS', 'WEB'];
-  let lastReason = '';
-  for (const client of clients) {
-    try {
-      const info = await yt.getBasicInfo(id, { client });
-      if (!playable(info)) {
-        lastReason = info?.playability_status?.reason || info?.playability_status?.status || 'nicht abspielbar';
-        if (info?.playability_status?.status === 'LOGIN_REQUIRED' && /privat|private/i.test(lastReason)) break;
-        continue;
-      }
-      // Testweise eine URL entschlüsseln – schlägt das fehl, nächsten Client probieren.
-      const f = info.streaming_data.adaptive_formats?.[0] || info.streaming_data.formats?.[0];
-      if (f) await f.decipher(yt.session.player);
-      return { info, client, source: 'youtubei' };
-    } catch (e) {
-      lastReason = e?.message || String(e);
-    }
+// Mehrere YouTube-Clients versetzt parallel anfragen: Der erste startet sofort,
+// jeder weitere nach kurzem Vorsprung (oder sofort, wenn der vorige scheitert).
+// Die erste brauchbare Antwort gewinnt – das spart bei hängenden oder
+// abgelehnten Clients mehrere Sekunden gegenüber „einer nach dem anderen“.
+const STAGGER_MS = 900;
+
+async function tryClient(yt, id, client) {
+  const info = await yt.getBasicInfo(id, { client });
+  if (!playable(info)) {
+    const reason = info?.playability_status?.reason || info?.playability_status?.status || 'nicht abspielbar';
+    const err = new Error(reason);
+    err.fatal = info?.playability_status?.status === 'LOGIN_REQUIRED' && /privat|private/i.test(reason);
+    throw err;
   }
-  const err = new Error(lastReason || 'Video nicht verfügbar');
-  err.status = 403;
-  throw err;
+  // Testweise eine URL entschlüsseln – schlägt das fehl, gilt der Client als unbrauchbar.
+  const f = info.streaming_data.adaptive_formats?.[0] || info.streaming_data.formats?.[0];
+  if (f) await f.decipher(yt.session.player);
+  return { info, client, source: 'youtubei' };
+}
+
+/**
+ * Startet Aufgaben versetzt: die erste sofort, jede weitere nach `delay` ms oder
+ * sofort, sobald die vorige scheitert. Liefert das erste erfolgreiche Ergebnis.
+ * Ein Fehler mit `fatal: true` bricht ab (weitere Versuche sind sinnlos).
+ */
+export function raceStaggered(tasks, delay) {
+  return new Promise((resolve, reject) => {
+    let next = 0;
+    let running = 0;
+    let done = false;
+    let lastErr = null;
+    let timer = null;
+    const finish = () => {
+      if (done || running || next < tasks.length) return;
+      done = true;
+      reject(lastErr || new Error('Keine Aufgabe'));
+    };
+    const launch = () => {
+      clearTimeout(timer);
+      if (done || next >= tasks.length) return;
+      const task = tasks[next++];
+      running++;
+      Promise.resolve()
+        .then(task)
+        .then(
+          (r) => {
+            running--;
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            resolve(r);
+          },
+          (e) => {
+            running--;
+            if (done) return;
+            lastErr = e;
+            if (e?.fatal) next = tasks.length;
+            if (next < tasks.length) launch();
+            else finish();
+          }
+        );
+      if (next < tasks.length) timer = setTimeout(launch, delay);
+    };
+    if (!tasks.length) return reject(new Error('Keine Aufgabe'));
+    launch();
+  });
+}
+
+async function viaYoutubei(id) {
+  const clients = store.settings.clients?.length ? store.settings.clients : ['ANDROID_VR', 'TV', 'IOS', 'WEB'];
+  // Zuerst ohne Anmeldung (schnell & zuverlässig), danach mit Anmeldung.
+  const sessions = [() => getStreamYT()];
+  if (isSignedIn()) sessions.push(() => getYT());
+  const tasks = [];
+  sessions.forEach((get, si) => {
+    for (const c of clients) {
+      tasks.push(async () => {
+        const yt = await get();
+        try {
+          return { ...(await tryClient(yt, id, c)), yt };
+        } catch (e) {
+          // „Privat“ ohne Anmeldung heißt nicht „privat“ für dein Konto.
+          if (si === 0 && sessions.length > 1) e.fatal = false;
+          throw e;
+        }
+      });
+    }
+  });
+  try {
+    return await raceStaggered(tasks, STAGGER_MS);
+  } catch (e) {
+    const err = new Error(e?.message || 'Video nicht verfügbar');
+    err.status = 403;
+    throw err;
+  }
 }
 
 function viaYtdlp(id) {
@@ -113,9 +185,19 @@ function viaYtdlp(id) {
   });
 }
 
-export async function resolveVideo(id, { fresh = false } = {}) {
+const inflight = new Map(); // id -> laufende Auflösung (gleichzeitige Anfragen teilen sie)
+
+export function resolveVideo(id, { fresh = false } = {}) {
   const hit = cache.get(id);
-  if (!fresh && hit && Date.now() - hit.at < CACHE_MS) return hit;
+  if (!fresh && hit && Date.now() - hit.at < CACHE_MS) return Promise.resolve(hit);
+  const key = fresh ? `${id}#fresh` : id;
+  if (!inflight.has(key)) {
+    inflight.set(key, doResolve(id).finally(() => inflight.delete(key)));
+  }
+  return inflight.get(key);
+}
+
+async function doResolve(id) {
   let res;
   try {
     res = await viaYoutubei(id);
@@ -140,7 +222,7 @@ function qualityLabel(f) {
 export async function streamsFor(id) {
   const r = await resolveVideo(id);
   if (r.source === 'yt-dlp') return streamsFromYtdlp(id, r);
-  const yt = await getYT();
+  const yt = r.yt || (await getYT());
   const { info } = r;
   const sd = info.streaming_data;
   const basic = info.basic_info || {};
@@ -150,14 +232,14 @@ export async function streamsFor(id) {
   for (const f of sd.formats || []) {
     try {
       const url = await f.decipher(yt.session.player);
-      if (url) progressive.push({ itag: f.itag, label: qualityLabel(f), mime: f.mime_type, url: vp(url) });
+      if (url) progressive.push({ itag: f.itag, label: qualityLabel(f), mime: f.mime_type, url: vp(url, `&vid=${id}`) });
     } catch {}
   }
   const audio = [];
   for (const f of (sd.adaptive_formats || []).filter((x) => x.has_audio && !x.has_video && /mp4/.test(x.mime_type))) {
     try {
       const url = await f.decipher(yt.session.player);
-      if (url) audio.push({ itag: f.itag, label: `${Math.round((f.bitrate || 0) / 1000)} kbit/s`, mime: f.mime_type, url: vp(url) });
+      if (url) audio.push({ itag: f.itag, label: `${Math.round((f.bitrate || 0) / 1000)} kbit/s`, mime: f.mime_type, url: vp(url, `&vid=${id}`) });
     } catch {}
   }
 
@@ -242,13 +324,24 @@ function addParam(url, k, v) {
   }
 }
 
+const mpdCache = new WeakMap(); // aufgelöstes Video -> fertiges Manifest
+
 export async function dashManifest(id) {
   const r = await resolveVideo(id);
   if (r.source !== 'youtubei') throw Object.assign(new Error('Kein DASH verfügbar'), { status: 404 });
-  const mpd = await r.info.toDash({
-    url_transformer: (url) => new URL(PROXY_BASE + vp(url.toString()))
-  });
-  return mpd.split(PROXY_BASE).join('');
+  if (!mpdCache.has(r)) {
+    mpdCache.set(
+      r,
+      r.info
+        .toDash({ url_transformer: (url) => new URL(PROXY_BASE + vp(url.toString(), `&vid=${id}`)) })
+        .then((mpd) => mpd.split(PROXY_BASE).join(''))
+        .catch((e) => {
+          mpdCache.delete(r);
+          throw e;
+        })
+    );
+  }
+  return mpdCache.get(r);
 }
 
 // HLS-Playlists umschreiben, damit auch Segmente über den Proxy laufen.
@@ -273,6 +366,74 @@ export function rewriteM3U8(body, baseUrl) {
     .join('\n');
 }
 
+// ---- Abgelaufene Stream-Links automatisch erneuern ---------------------------------
+// googlevideo-Links laufen ab bzw. werden nach einiger Zeit mit 403 abgelehnt. Früher
+// hat der Player dann das ganze Video neu geladen (kurzer Aussetzer alle paar
+// Sekunden). Jetzt holt der Server still einen frischen Link für dasselbe Format
+// (gleiche itag + Tonspur) und liefert die angefragten Bytes einfach weiter.
+const remap = new Map(); // `${vid}|${itag}|${xtags}` -> { url, at }
+const refreshing = new Map(); // vid -> Promise
+
+function formatKey(vid, url) {
+  try {
+    const u = new URL(url);
+    return `${vid}|${u.searchParams.get('itag') || ''}|${u.searchParams.get('xtags') || ''}`;
+  } catch {
+    return null;
+  }
+}
+
+export async function freshUrlFor(vid, oldUrl) {
+  const key = formatKey(vid, oldUrl);
+  if (!key) return null;
+  const known = remap.get(key);
+  // Kürzlich erneuert → diesen Link verwenden statt YouTube erneut zu fragen.
+  if (known && known.url !== oldUrl && Date.now() - known.at < 30_000) return known.url;
+  if (!refreshing.has(vid)) {
+    refreshing.set(vid, resolveVideo(vid, { fresh: true }).finally(() => setTimeout(() => refreshing.delete(vid), 5000)));
+  }
+  let r;
+  try {
+    r = await refreshing.get(vid);
+  } catch {
+    return null;
+  }
+  if (r.source !== 'youtubei') return null;
+  const [, itag, xtags] = key.split('|');
+  const sd = r.info.streaming_data || {};
+  const all = [...(sd.adaptive_formats || []), ...(sd.formats || [])];
+  const cands = all.filter((f) => String(f.itag) === itag);
+  const f = cands.find((x) => (x.xtags || '') === xtags) || cands.find((x) => (x.url || '').includes(xtags)) || cands[0];
+  if (!f) return null;
+  try {
+    const yt = r.yt || (await getYT());
+    const url = await f.decipher(yt.session.player);
+    if (!url) return null;
+    remap.set(key, { url, at: Date.now() });
+    if (remap.size > 500) remap.delete(remap.keys().next().value);
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchUpstream(target, range, signal) {
+  let url = target;
+  let upstream;
+  // Manuelle Weiterleitungen, damit jedes Ziel geprüft wird.
+  for (let i = 0; i < 5; i++) {
+    upstream = await fetch(url, { headers: upstreamHeaders(url, range), redirect: 'manual', signal });
+    if (upstream.status >= 300 && upstream.status < 400 && upstream.headers.get('location')) {
+      const next = new URL(upstream.headers.get('location'), url).href;
+      if (!isAllowedUpstream(next)) throw new Error('Weiterleitung auf unerlaubten Host');
+      url = next;
+      continue;
+    }
+    break;
+  }
+  return { upstream, url };
+}
+
 const PASS_HEADERS = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'last-modified', 'etag'];
 
 // /vp?u=<googlevideo-URL> – leitet Bytes inkl. Range-Anfragen durch.
@@ -286,17 +447,17 @@ export async function proxy(req, res, query) {
   req.on('close', () => ctrl.abort());
   let upstream;
   let url = target;
+  const vid = query.get('vid');
   try {
-    // Manuelle Weiterleitungen, damit jedes Ziel geprüft wird.
-    for (let i = 0; i < 5; i++) {
-      upstream = await fetch(url, { headers: upstreamHeaders(url, req.headers.range), redirect: 'manual', signal: ctrl.signal });
-      if (upstream.status >= 300 && upstream.status < 400 && upstream.headers.get('location')) {
-        const next = new URL(upstream.headers.get('location'), url).href;
-        if (!isAllowedUpstream(next)) throw new Error('Weiterleitung auf unerlaubten Host');
-        url = next;
-        continue;
-      }
-      break;
+    // Schon einmal erneuert? Dann gleich den frischen Link nehmen.
+    const key = vid && formatKey(vid, target);
+    const known = key && remap.get(key);
+    if (known && Date.now() - known.at < 5 * 60 * 60 * 1000) url = known.url;
+    ({ upstream, url } = await fetchUpstream(url, req.headers.range, ctrl.signal));
+    if ((upstream.status === 403 || upstream.status === 410) && vid && /^[A-Za-z0-9_-]{11}$/.test(vid)) {
+      upstream.body?.cancel().catch(() => {});
+      const fresh = await freshUrlFor(vid, url);
+      if (fresh && !ctrl.signal.aborted) ({ upstream, url } = await fetchUpstream(fresh, req.headers.range, ctrl.signal));
     }
   } catch (e) {
     if (ctrl.signal.aborted) return;
@@ -383,35 +544,48 @@ function formatSize(bytes) {
   return `${Math.max(1, Math.round(bytes / 1e6))} MB`;
 }
 
-// /dl/ID?v=itag&a=itag – liefert die fertige Datei (Video+Audio zusammengefügt oder nur Audio).
-export async function download(req, res, id, query) {
+// Öffnet einen Download als Byte-Strom (Video+Audio zusammengefügt oder nur Audio).
+// Wird für /dl/… (Datei an den Browser) und für Offline-Downloads in der App genutzt.
+export async function openDownload(id, { v, a, signal }) {
   const { muxMp4, fetchChunks } = await import('./mux.js');
   const r = await resolveVideo(id);
   if (r.source !== 'youtubei') throw Object.assign(new Error('Für dieses Video ist nur der einfache Download verfügbar.'), { status: 400 });
-  const yt = await getYT();
+  const yt = r.yt || (await getYT());
   const formats = r.info.streaming_data?.adaptive_formats || [];
   const find = (itag) => formats.find((f) => String(f.itag) === String(itag));
-  const vf = query.get('v') ? find(query.get('v')) : null;
-  const af = find(query.get('a'));
-  if (!af || (query.get('v') && !vf)) throw Object.assign(new Error('Format nicht gefunden'), { status: 404 });
-
+  const vf = v ? find(v) : null;
+  const af = find(a);
+  if (!af || (v && !vf)) throw Object.assign(new Error('Format nicht gefunden'), { status: 404 });
   const title = (r.info.basic_info?.title || id).replace(/[\\/:*?"<>|\n\r]+/g, '_').slice(0, 120);
-  const name = vf ? `${title} (${vf.height}p).mp4` : `${title}.m4a`;
-  const ctl = new AbortController();
-  req.on('close', () => ctl.abort());
   const open = async (f) => {
     const url = await f.decipher(yt.session.player);
-    return fetchChunks(url, { headers: upstreamHeaders(url), total: Number(f.content_length) || 0, signal: ctl.signal });
+    return fetchChunks(url, { headers: upstreamHeaders(url), total: Number(f.content_length) || 0, signal });
   };
+  const source = vf ? muxMp4(await open(vf), await open(af)) : await open(af);
+  return {
+    source,
+    audioOnly: !vf,
+    name: vf ? `${title} (${vf.height}p).mp4` : `${title}.m4a`,
+    mime: vf ? 'video/mp4' : 'audio/mp4',
+    size: (vf ? Number(vf.content_length || 0) : 0) + Number(af.content_length || 0),
+    height: vf?.height || 0,
+    info: r.info
+  };
+}
+
+// /dl/ID?v=itag&a=itag – liefert die fertige Datei (Video+Audio zusammengefügt oder nur Audio).
+export async function download(req, res, id, query) {
+  const ctl = new AbortController();
+  req.on('close', () => ctl.abort());
+  const d = await openDownload(id, { v: query.get('v'), a: query.get('a'), signal: ctl.signal });
   res.writeHead(200, {
-    'content-type': vf ? 'video/mp4' : 'audio/mp4',
-    'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+    'content-type': d.mime,
+    'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(d.name)}`,
     'cache-control': 'no-store',
-    ...(!vf && af.content_length ? { 'content-length': String(af.content_length) } : {})
+    ...(d.audioOnly && d.size ? { 'content-length': String(d.size) } : {})
   });
   try {
-    const source = vf ? muxMp4(await open(vf), await open(af)) : await open(af);
-    for await (const chunk of source) {
+    for await (const chunk of d.source) {
       if (!res.write(chunk)) await new Promise((ok) => res.once('drain', ok));
     }
     res.end();

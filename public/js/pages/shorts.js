@@ -37,6 +37,8 @@ export default async function shorts({ node, params, signal }) {
       cont = data.cont;
       const fresh = data.ids.filter((id) => !ids.includes(id));
       for (const id of fresh) addSlide(id);
+      // Die ersten Shorts sofort anfragen (Streams laufen parallel zum Aufbau der Seite).
+      fresh.slice(0, 2).forEach((id) => getStreams(id).catch(() => {}));
     } finally {
       loading = false;
     }
@@ -49,10 +51,11 @@ export default async function shorts({ node, params, signal }) {
         <img class="short-poster" src="https://i.ytimg.com/vi/${id}/oar2.jpg" data-fallback="https://i.ytimg.com/vi/${id}/hq2.jpg" alt="" loading="lazy">
         <div class="short-video-slot"></div>
         <div class="short-top">
-          <button class="short-round short-playpause" aria-label="Wiedergabe">${raw(icon('pause'))}</button>
-          <button class="short-round short-mute" aria-label="Ton">${raw(icon(video.muted ? 'volumeOff' : 'volume'))}</button>
+          <button class="short-round short-back" aria-label="Zurück">${raw(icon('back'))}</button>
+          <span class="short-top-title">Shorts</span>
           <span class="short-top-spacer"></span>
           <button class="short-round short-search" aria-label="Suchen">${raw(icon('search'))}</button>
+          <button class="short-round more" aria-label="Mehr">${raw(icon('more'))}</button>
         </div>
         <div class="short-paused-icon">${raw(icon('play'))}</div>
         <div class="short-bottom">
@@ -62,11 +65,11 @@ export default async function shorts({ node, params, signal }) {
         <div class="short-progress"><div></div></div>
       </div>
       <div class="short-actions">
-        <button class="short-act like" aria-label="Mag ich"><span class="sa-icon">${raw(icon('likeFilled'))}</span><span class="like-count">Mag ich</span></button>
-        <button class="short-act dislike" aria-label="Mag ich nicht"><span class="sa-icon">${raw(icon('dislikeFilled'))}</span><span>Mag ich nicht</span></button>
-        <button class="short-act comments" aria-label="Kommentare"><span class="sa-icon">${raw(icon('commentFilled'))}</span><span class="comment-count">Kommentare</span></button>
-        <button class="short-act share" aria-label="Teilen"><span class="sa-icon">${raw(icon('shareFilled'))}</span><span>Teilen</span></button>
-        <button class="short-act more" aria-label="Mehr"><span class="sa-icon">${raw(icon('moreH'))}</span></button>
+        <button class="short-act like" aria-label="Mag ich"><span class="sa-icon">${raw(icon('like'))}</span><span class="like-count">Mag ich</span></button>
+        <button class="short-act dislike" hidden aria-label="Mag ich nicht"></button>
+        <button class="short-act comments" aria-label="Kommentare"><span class="sa-icon">${raw(icon('comment'))}</span><span class="comment-count">Kommentare</span></button>
+        <button class="short-act save" aria-label="Speichern"><span class="sa-icon">${raw(icon('bookmark'))}</span><span>Speichern</span></button>
+        <button class="short-act share" aria-label="Teilen"><span class="sa-icon">${raw(icon('share'))}</span><span>Teilen</span></button>
         <a class="short-act ch-thumb" aria-label="Kanal"></a>
       </div>
     </section>`);
@@ -88,6 +91,7 @@ export default async function shorts({ node, params, signal }) {
     const m = await loadMeta(id);
     if (!m) return;
     slide._meta = m;
+    if (m.offline && m.thumbnail) slide.querySelector('.short-poster').src = m.thumbnail;
     slide.querySelector('.short-caption').textContent = m.title;
     const ch = slide.querySelector('.short-channel');
     ch.innerHTML = '';
@@ -115,17 +119,18 @@ export default async function shorts({ node, params, signal }) {
       document.body.classList.add('mobile-search');
       document.getElementById('search-input').focus();
     };
-    slide.querySelector('.short-playpause').onclick = () => (video.paused ? video.play().catch(() => {}) : video.pause());
-    slide.querySelector('.short-mute').onclick = () => {
+    slide.querySelector('.short-back').onclick = () => (history.length > 1 ? history.back() : go('/'));
+    const toggleMute = () => {
       video.muted = !video.muted;
       localStorage.setItem('vl:shortsMuted', video.muted ? '1' : '0');
-      scroller.querySelectorAll('.short-mute').forEach((b) => (b.innerHTML = icon(video.muted ? 'volumeOff' : 'volume')));
+      toast(video.muted ? 'Ton aus' : 'Ton an');
     };
     const likeBtn = slide.querySelector('.like');
     const dislikeBtn = slide.querySelector('.dislike');
     // Aktiv = gefülltes Symbol (wie in der App).
     // Wie in der App: Symbole immer gefüllt, aktiv mit hellem Kreis und kurzem "Pop".
     const paintRating = () => {
+      likeBtn.querySelector('.sa-icon').innerHTML = icon(likeBtn.classList.contains('on') ? 'likeFilled' : 'like');
       for (const b of [likeBtn, dislikeBtn]) {
         b.classList.remove('pop');
         if (b.classList.contains('on')) {
@@ -163,6 +168,10 @@ export default async function shorts({ node, params, signal }) {
     };
     dislikeBtn.onclick = () => rate(dislikeBtn.classList.contains('on') ? 'none' : 'dislike');
     slide.querySelector('.comments').onclick = () => openComments(id, slide._meta?.comments || '');
+    slide.querySelector('.save').onclick = () => {
+      const m = slide._meta || {};
+      saveDialog({ id, title: m.title, thumbnail: `https://i.ytimg.com/vi/${id}/oar2.jpg`, channel: m.channel, short: true });
+    };
     slide.querySelector('.share').onclick = () => {
       const m = slide._meta || {};
       if (navigator.share) navigator.share({ title: m.title, url: `https://youtube.com/shorts/${id}` }).catch(() => {});
@@ -172,7 +181,8 @@ export default async function shorts({ node, params, signal }) {
       const m = slide._meta || {};
       const v = { id, title: m.title, thumbnail: `https://i.ytimg.com/vi/${id}/oar2.jpg`, channel: m.channel, short: true };
       openMenu(e.currentTarget, [
-        { icon: 'save', label: 'In Playlist speichern', run: () => saveDialog(v) },
+        { icon: dislikeBtn.classList.contains('on') ? 'dislikeFilled' : 'dislike', label: dislikeBtn.classList.contains('on') ? '„Mag ich nicht“ entfernen' : 'Mag ich nicht', run: () => dislikeBtn.click() },
+        { icon: video.muted ? 'volume' : 'volumeOff', label: video.muted ? 'Ton an' : 'Ton aus', run: toggleMute },
         { icon: 'download', label: 'Herunterladen', run: () => downloadDialog(v) },
         { icon: 'external', label: 'Als normales Video ansehen', run: () => go(`/watch?v=${id}`) }
       ]);
@@ -197,9 +207,9 @@ export default async function shorts({ node, params, signal }) {
     return streamCache.get(id);
   };
   const SHAKA_CONFIG = {
-    streaming: { bufferingGoal: 12, rebufferingGoal: 0.4, bufferBehind: 10 },
+    streaming: { bufferingGoal: 12, rebufferingGoal: 0.25, bufferBehind: 10, segmentPrefetchLimit: 2 },
     manifest: { dash: { ignoreMinBufferTime: true } },
-    abr: { defaultBandwidthEstimate: 2_500_000 }
+    abr: { defaultBandwidthEstimate: 2_500_000, switchInterval: 2 }
   };
 
   async function ensureShaka() {
@@ -247,6 +257,9 @@ export default async function shorts({ node, params, signal }) {
     history.replaceState(history.state, '', `/shorts/${id}`);
     const token = ++loadToken;
     video.pause();
+    // Sofort (parallel) die Stream-Infos der nächsten Shorts anfordern – günstig,
+    // spart beim Weiterwischen die Wartezeit auf den Server.
+    for (const n of [idx + 1, idx + 2, idx + 3]) if (ids[n]) getStreams(ids[n]).catch(() => {});
     try {
       const s = await getStreams(id);
       if (token !== loadToken) return;
@@ -321,7 +334,6 @@ export default async function shorts({ node, params, signal }) {
     const slide = scroller.children[active];
     if (!slide) return;
     slide.classList.toggle('paused', video.paused);
-    slide.querySelector('.short-playpause').innerHTML = icon(video.paused ? 'play' : 'pause');
   };
   video.addEventListener('play', syncPause);
   video.addEventListener('pause', syncPause);
@@ -367,7 +379,8 @@ export default async function shorts({ node, params, signal }) {
       e.preventDefault();
       video.paused ? video.play().catch(() => {}) : video.pause();
     } else if (e.key === 'm') {
-      scroller.children[active]?.querySelector('.short-mute').click();
+      video.muted = !video.muted;
+      localStorage.setItem('vl:shortsMuted', video.muted ? '1' : '0');
     }
   };
   document.addEventListener('keydown', onKey);

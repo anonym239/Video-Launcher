@@ -23,13 +23,14 @@ export class Player {
         <div class="p-poster"></div>
         <div class="p-spinner"><div class="spinner big"></div></div>
         <div class="p-feedback" aria-hidden="true"></div>
-        <div class="p-seek-ripple left"><div>${raw(icon('prev'))}<span>10 Sekunden</span></div></div>
-        <div class="p-seek-ripple right"><div>${raw(icon('next'))}<span>10 Sekunden</span></div></div>
-        <div class="p-speed-badge">2x ${raw(icon('next'))}</div>
+        <div class="p-seek-ripple left"><div>${raw(icon('fastRewind'))}<span>10 Sekunden</span></div></div>
+        <div class="p-seek-ripple right"><div>${raw(icon('fastForward'))}<span>10 Sekunden</span></div></div>
+        <div class="p-speed-badge">2x ${raw(icon('fastForward'))}</div>
         <div class="p-error" hidden></div>
         <div class="p-endscreen" hidden></div>
         <div class="p-controls">
           <div class="p-top">
+            <button class="p-btn p-minimize" data-act="minimize" aria-label="Verkleinern">${raw(icon('down'))}</button>
             <div class="p-title"></div>
             <button class="p-btn p-mini-close" data-act="close" aria-label="Schließen">${raw(icon('close'))}</button>
           </div>
@@ -127,6 +128,7 @@ export class Player {
     if (token !== this.loadToken) return;
     this.streams = streams;
     this.storyboard = streams.storyboard;
+    if (streams.offline && streams.thumbnail) this.q('.p-poster').style.backgroundImage = `url("${streams.thumbnail}")`;
     this.root.classList.toggle('is-live', !!streams.live);
     this.q('.p-live-badge').hidden = !streams.live;
     if (!this.meta.title && streams.title) {
@@ -153,12 +155,17 @@ export class Player {
           p.configure({
             streaming: {
               bufferingGoal: 30,
-              rebufferingGoal: 0.6,
+              // Sofort losspielen, sobald ein kleines Stück da ist; Segmente parallel vorladen.
+              rebufferingGoal: 0.3,
+              segmentPrefetchLimit: 2,
               bufferBehind: 20,
-              retryParameters: { maxAttempts: 4, baseDelay: 500, backoffFactor: 2, timeout: 20000 }
+              // Großzügige Zeitlimits: Über den Handy-Proxy dauern Segmente manchmal länger.
+              // Ein hängender Abruf wird nach 10 s ohne Daten neu gestartet statt das
+              // ganze Video neu zu laden.
+              retryParameters: { maxAttempts: 8, baseDelay: 400, backoffFactor: 1.6, timeout: 60000, stallTimeout: 10000, connectionTimeout: 15000 }
             },
-            manifest: { dash: { ignoreMinBufferTime: true } },
-            abr: { enabled: true, defaultBandwidthEstimate: 3_000_000 },
+            manifest: { dash: { ignoreMinBufferTime: true }, retryParameters: { maxAttempts: 4, baseDelay: 500, backoffFactor: 2, timeout: 30000 } },
+            abr: { enabled: true, defaultBandwidthEstimate: 3_000_000, switchInterval: 2 },
             preferredAudioLanguage: state.settings.lang || 'de',
             preferredVariantRole: 'main'
           });
@@ -214,14 +221,30 @@ export class Player {
     this.video.load();
   }
 
+  // Netzwerkfehler mitten im Video: erst nur das Streaming fortsetzen (kein Neuladen,
+  // kein Bildaussetzer). Der Server tauscht abgelaufene Links selbst aus.
+  #recoverStreaming() {
+    if (!this.shaka) return false;
+    this.netRetries = (this.netRetries || 0) + 1;
+    if (this.netRetries > 6) return false;
+    const p = this.shaka;
+    setTimeout(() => {
+      if (this.shaka === p) p.retryStreaming();
+    }, Math.min(4000, 500 * this.netRetries));
+    return true;
+  }
+
   #onShakaError(err) {
     if (!err) return;
     console.warn('Shaka-Fehler', err);
+    // Kategorie 1 = NETWORK: zuerst sanft weiter versuchen.
+    if (err.category === 1 && this.#recoverStreaming()) return;
     // 1001 = BAD_HTTP_STATUS, 1002 = HTTP_ERROR (z. B. abgelaufene URL) → Streams neu holen.
     if (err.severity === 2 && this.meta && !this.retried) {
       this.retried = true;
       const t = this.video.currentTime;
-      api(`/api/streams/${this.meta.id}?fresh=1`).then(() => this.load(this.meta, { startAt: t })).catch(() => this.#setError('Wiedergabefehler'));
+      const wasPlaying = !this.video.paused;
+      api(`/api/streams/${this.meta.id}?fresh=1`).then(() => this.load(this.meta, { startAt: t, autoplay: wasPlaying })).catch(() => this.#setError('Wiedergabefehler'));
     } else if (err.severity === 2) {
       this.#setError('Wiedergabefehler (Code ' + err.code + ')');
     }
@@ -267,7 +290,10 @@ export class Player {
       this.setCaption(captions[idx]?.lang ?? null, idx);
     }
     this.q('.p-cc').classList.toggle('disabled', !captions.length);
-    this.q('.p-cc').classList.remove('on');
+    if (this.captionLang == null) {
+      this.q('.p-cc').classList.remove('on');
+      this.q('.p-cc').innerHTML = icon('cc');
+    }
   }
 
   setCaption(lang, index) {
@@ -276,7 +302,10 @@ export class Player {
       t.track.mode = lang != null && i === index ? 'showing' : 'disabled';
     });
     this.captionLang = lang;
-    this.q('.p-cc').classList.toggle('on', lang != null);
+    const cc = this.q('.p-cc');
+    cc.classList.toggle('on', lang != null);
+    cc.innerHTML = icon(lang != null ? 'ccOn' : 'cc');
+    cc.setAttribute('aria-pressed', String(lang != null));
   }
 
   toggleCaptions() {
@@ -525,6 +554,14 @@ export class Player {
     f.classList.add('show');
   }
 
+  #seekTap(right) {
+    this.seekBy(right ? 10 : -10);
+    const rip = this.q(`.p-seek-ripple.${right ? 'right' : 'left'}`);
+    rip.classList.remove('show');
+    void rip.offsetWidth;
+    rip.classList.add('show');
+  }
+
   #showControls() {
     this.root.classList.add('controls-visible');
     clearTimeout(this.hideTimer);
@@ -704,6 +741,7 @@ export class Player {
       reportPlaying(true);
     });
     v.addEventListener('playing', () => {
+      this.netRetries = 0;
       r.dataset.state = 'playing';
       r.classList.remove('show-poster', 'buffering');
     });
@@ -754,6 +792,18 @@ export class Player {
       if (!b || !r.contains(b)) return;
       e.stopPropagation();
       const act = b.dataset.act;
+      if (this.tapWhileHidden) {
+        this.tapWhileHidden = false;
+        this.#showControls();
+        return;
+      }
+      // Zweiter schneller Tipp an der Seite nach dem Einblenden = Doppeltippen
+      // (vorspulen), nicht „Nächstes Video“.
+      if (b.closest('.p-center') && act !== 'play' && Date.now() - (this.revealAt || 0) < 350) {
+        this.revealAt = 0;
+        this.#seekTap(act === 'next');
+        return;
+      }
       if (act === 'play') this.togglePlay();
       else if (act === 'next') this.hooks.onNext?.();
       else if (act === 'prev') this.hooks.onPrev?.();
@@ -764,6 +814,10 @@ export class Player {
       else if (act === 'cc') this.toggleCaptions();
       else if (act === 'chapters') emit('player:chapters');
       else if (act === 'close') this.hooks.onClose?.();
+      else if (act === 'minimize') {
+        if (document.fullscreenElement) document.exitFullscreen?.();
+        emit('player:mini');
+      }
       else if (act === 'settings') {
         if (this.q('.p-menu').hidden) this.#openMenu('main');
         else this.#closeMenu();
@@ -806,22 +860,31 @@ export class Player {
       const now = Date.now();
       const rect = r.getBoundingClientRect();
       const x = (e.clientX - rect.left) / rect.width;
-      if (now - lastTap < 300) {
+      const y = e.clientY - rect.top;
+      // Oben (Titel) und unten (Knopfleiste) liegen die Bedienelemente: dort nie
+      // doppeltippen-vorspulen, sonst wird z. B. der Untertitel-Knopf zum +10 s.
+      const inBars = y < 56 || y > rect.height - 72;
+      if (touch && !r.classList.contains('controls-visible') && !v.paused) {
+        // Ausgeblendet: Steuerung sofort zeigen, damit der nächste Tipp den Knopf trifft.
+        clearTimeout(tapTimer);
+        this.#showControls();
+        lastTap = inBars ? 0 : now;
+        if (!inBars && (x < 0.35 || x > 0.65)) this.revealAt = now;
+        return;
+      }
+      if (now - lastTap < 300 && !inBars) {
         clearTimeout(tapTimer);
         lastTap = 0;
         if (touch && (x < 0.35 || x > 0.65)) {
-          const right = x > 0.65;
-          this.seekBy(right ? 10 : -10);
-          const rip = this.q(`.p-seek-ripple.${right ? 'right' : 'left'}`);
-          rip.classList.remove('show');
-          void rip.offsetWidth;
-          rip.classList.add('show');
+          clearTimeout(tapTimer);
+          this.#seekTap(x > 0.65);
         } else {
           this.fullscreen();
         }
         return;
       }
-      lastTap = now;
+      lastTap = inBars ? 0 : now;
+      clearTimeout(tapTimer);
       tapTimer = setTimeout(() => {
         if (touch) {
           if (r.classList.contains('controls-visible') && !v.paused) this.#hideControls();
@@ -862,8 +925,19 @@ export class Player {
       if (matchMedia('(pointer: coarse)').matches) e.preventDefault();
     });
 
-    r.addEventListener('mousemove', () => this.#showControls());
-    r.addEventListener('mouseleave', () => this.#hideControls());
+    // Nur echte Maus: Beim Tippen erzeugt Android zusätzlich „mousemove/mouseleave“.
+    // Das hat die ausgeblendete Steuerung kurz klickbar gemacht – der erste Tipp auf
+    // den (unsichtbaren) Untertitel-Knopf hat ihn dann heimlich umgeschaltet.
+    r.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'mouse') this.#showControls();
+    });
+    r.addEventListener('pointerleave', (e) => {
+      if (e.pointerType === 'mouse') this.#hideControls();
+    });
+    // Tipp bei ausgeblendeter Steuerung: nur einblenden, keinen Knopf auslösen.
+    r.addEventListener('pointerdown', (e) => {
+      this.tapWhileHidden = e.pointerType !== 'mouse' && this.mode !== 'mini' && !r.classList.contains('controls-visible') && !v.paused;
+    }, true);
 
     // Suchleiste
     const bar = this.q('.p-progress');
@@ -971,20 +1045,20 @@ export class Player {
       case 'j':
       case 'J':
         this.seekBy(-10);
-        this.#flash('replay', '-10 s');
+        this.#flash('fastRewind', '-10 s');
         break;
       case 'l':
       case 'L':
         this.seekBy(10);
-        this.#flash('next', '+10 s');
+        this.#flash('fastForward', '+10 s');
         break;
       case 'ArrowLeft':
         this.seekBy(-5);
-        this.#flash('prev', '-5 s');
+        this.#flash('fastRewind', '-5 s');
         break;
       case 'ArrowRight':
         this.seekBy(5);
-        this.#flash('next', '+5 s');
+        this.#flash('fastForward', '+5 s');
         break;
       case 'ArrowUp':
         v.muted = false;

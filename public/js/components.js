@@ -168,7 +168,7 @@ export function postCard(item) {
 
 export function shelf(item, layout) {
   const node = el(html`<section class="shelf ${item.shorts ? 'shelf-shorts' : ''}">
-      ${item.title || item.shorts ? html`<h2 class="shelf-title">${item.shorts ? raw(icon('shortsFilled', 'shorts-red')) : ''}${item.title || 'Shorts'}</h2>` : ''}
+      ${item.title || item.shorts ? html`<h2 class="shelf-title">${item.shorts ? raw(icon('shortsLogo', 'shorts-red')) : ''}${item.title || 'Shorts'}</h2>` : ''}
       <div class="shelf-items ${item.shorts ? 'shorts-row' : ''}"></div>
       ${item.items.length > 6 && !item.shorts ? html`<button class="btn btn-text shelf-more">Mehr anzeigen ${raw(icon('down'))}</button>` : ''}
     </section>`);
@@ -411,7 +411,7 @@ export function openDialog({ title, body, actions = [], className = '', onClose 
 export function videoMenu(item, anchor, card) {
   const video = { id: item.id, title: item.title, thumbnail: item.thumbnail, duration: item.duration, channel: item.channel, short: !!item.short };
   const items = [
-    { icon: 'queue', label: 'Zur Wiedergabeliste hinzufügen', run: () => addToQueue(video) },
+    { icon: 'addQueue', label: 'Zur Wiedergabeliste hinzufügen', run: () => addToQueue(video) },
     { icon: 'clock', label: 'Zu „Später ansehen“ hinzufügen', run: () => saveTo(video, 'WL', true) },
     { icon: 'save', label: 'In Playlist speichern', run: () => saveDialog(video) },
     { icon: 'download', label: 'Herunterladen', run: () => downloadDialog(video) },
@@ -424,7 +424,7 @@ export function videoMenu(item, anchor, card) {
     } }
   ];
   if (item.channel?.id) {
-    items.push({ icon: 'block', label: 'Kanal nicht empfehlen', run: () => {
+    items.push({ icon: 'dontRecommend', label: 'Kanal nicht empfehlen', run: () => {
       blockChannel(item.channel);
       document.querySelectorAll(`.video-card`).forEach((c) => {
         if (c.querySelector(`a[href="/channel/${item.channel.id}"]`)) c.remove();
@@ -513,21 +513,53 @@ export async function downloadDialog(video) {
   const body = el('<div class="download-list"><div class="spinner"></div></div>');
   openDialog({ title: 'Herunterladen', body, className: 'download-dialog' });
   try {
-    const { options } = await api(`/api/download/${video.id}`);
+    const [{ options }, off] = await Promise.all([api(`/api/download/${video.id}`), api('/api/offline').catch(() => ({ items: [], jobs: [] }))]);
     body.innerHTML = '';
-    if (!options.length) body.textContent = 'Für dieses Video sind keine Downloads verfügbar.';
+    const have = off.items.find((i) => i.id === video.id);
+    if (have) {
+      const row = el(html`<div class="dl-have">${raw(icon('check'))}<span>Bereits heruntergeladen${have.label ? ` (${have.label})` : ''}</span><a class="btn btn-text" href="/feed/downloads">Ansehen</a></div>`);
+      row.querySelector('a').addEventListener('click', () => closeOverlay());
+      body.appendChild(row);
+    }
+    if (!options.length) body.appendChild(document.createTextNode('Für dieses Video sind keine Downloads verfügbar.'));
     const safe = (video.title || video.id).replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120);
     for (const o of options) {
-      // Direkte Links (einfacher Download) bekommen einen Dateinamen über den Proxy.
-      const href = o.direct ? `${o.url}&dl=${encodeURIComponent(safe + (o.kind === 'audio' ? '.m4a' : '.mp4'))}` : o.url;
-      const row = el(html`<a class="menu-item dl-row" href="${href}" download>${raw(icon(o.kind === 'audio' ? 'music' : 'download'))}<span><b>${o.label}</b><small class="muted">${o.sub}</small></span></a>`);
-      row.addEventListener('click', () => {
-        toast(`Download gestartet: ${o.label}`);
-        setTimeout(closeOverlay, 300);
+      const row = el(html`<button class="menu-item dl-row">${raw(icon(o.kind === 'audio' ? 'music' : 'download'))}<span><b>${o.label}</b><small class="muted">${o.sub}</small></span></button>`);
+      row.addEventListener('click', async () => {
+        // Immer im App-Speicher sichern – so geht es auch ohne Internet.
+        try {
+          await api(`/api/offline/${video.id}`, {
+            method: 'POST',
+            body: {
+              url: o.url,
+              label: o.label,
+              audioOnly: o.kind === 'audio',
+              title: video.title || '',
+              short: !!video.short,
+              duration: video.duration || 0,
+              channel: video.channel ? { id: video.channel.id || '', name: video.channel.name || '', avatar: video.channel.avatar || '' } : null
+            }
+          });
+          toast('Download gestartet – zu finden unter „Du“ → „Downloads“');
+        } catch (e) {
+          toast(e.message);
+          return;
+        }
+        // Optional (Einstellungen): zusätzlich eine Kopie in die Galerie/den Download-Ordner.
+        if (state.settings.saveToGallery) {
+          const href = o.direct ? `${o.url}&dl=${encodeURIComponent(safe + (o.kind === 'audio' ? '.m4a' : '.mp4'))}` : o.url;
+          const a = document.createElement('a');
+          a.href = href;
+          a.download = '';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }
+        setTimeout(closeOverlay, 200);
       });
       body.appendChild(row);
     }
-    body.appendChild(el('<p class="muted small dl-hint">Hohe Qualitäten werden beim Herunterladen aus Bild und Ton zusammengesetzt.</p>'));
+    body.appendChild(el('<p class="muted small dl-hint">Downloads werden in der App gespeichert und lassen sich auch ohne Internet ansehen.</p>'));
   } catch (e) {
     body.textContent = e.message;
   }
@@ -548,12 +580,12 @@ export function subscribeButton(channel, subscribed, { onChange } = {}) {
     if (on) {
       const items = [];
       if (signedIn()) {
-        items.push({ icon: 'bellFilled', label: 'Alle', run: () => notifPref(channel, 'ALL') });
+        items.push({ icon: 'bellActive', label: 'Alle', run: () => notifPref(channel, 'ALL') });
         items.push({ icon: 'bell', label: 'Personalisiert', run: () => notifPref(channel, 'PERSONALIZED') });
         items.push({ icon: 'bellOff', label: 'Keine', run: () => notifPref(channel, 'NONE') });
         items.push({ divider: true });
       }
-      items.push({ icon: 'close', label: 'Abo beenden', danger: true, run: () => {
+      items.push({ icon: 'unsubscribe', label: 'Abo beenden', danger: true, run: () => {
         openDialog({
           body: html`<p>Abo für ${channel.name || 'diesen Kanal'} beenden?</p>`,
           actions: [{ label: 'Abbrechen' }, { label: 'Abo beenden', primary: true, run: () => toggle(false) }]

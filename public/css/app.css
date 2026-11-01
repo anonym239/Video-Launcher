@@ -88,7 +88,6 @@ code { font-family: ui-monospace, Menlo, monospace; font-size: 0.92em; }
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 .icon { width: 24px; height: 24px; fill: currentColor; flex: none; display: block; }
-.icon.ic-line { fill: none; stroke: currentColor; }
 .icon-btn {
   width: 40px; height: 40px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center; flex: none;
@@ -431,8 +430,11 @@ code { font-family: ui-monospace, Menlo, monospace; font-size: 0.92em; }
 /* Regale (Shelves) */
 .shelf { position: relative; padding: 24px 0 8px; border-top: 4px solid transparent; }
 .rich-grid > .shelf { border-top: 1px solid var(--border); margin-top: -16px; }
+/* Regale (z. B. „Collabs“ auf Kanalseiten) gehen immer über die volle Breite –
+   sonst landeten sie bei 2 Spalten nur in der linken Hälfte. */
+.rich-grid > .shelf, .rich-grid > .shelf-more, .rich-grid > .section-header { grid-column: 1 / -1; }
 .shelf-title { display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 700; margin-bottom: 16px; }
-.shorts-red { fill: var(--red); width: 28px; height: 28px; }
+.shorts-red { fill: var(--red); color: var(--red); width: 28px; height: 28px; }
 .shelf-items.grid { display: grid; gap: 40px 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
 .shelf-items.list { display: flex; flex-direction: column; gap: 16px; }
 .shelf-hidden { display: none !important; }
@@ -635,6 +637,10 @@ select option { background: var(--bg-menu); color: var(--text); }
 
 /* ---- Login ------------------------------------------------------------------------ */
 .login-dialog { width: min(480px, calc(100vw - 32px)); }
+.login-gate { position: fixed; inset: 0; z-index: 2000; background: var(--bg); overflow-y: auto; display: flex; align-items: center; justify-content: center; padding: 32px 20px calc(32px + env(safe-area-inset-bottom)); }
+.login-gate .login { width: min(440px, 100%); }
+.login-hero h2 { margin: 0; color: var(--text); font-size: 22px; }
+body.gated { overflow: hidden; }
 .login-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px; padding: 8px 0 20px; color: var(--text-2); }
 .login-hero svg { width: 56px; height: 56px; }
 .login-step { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
@@ -892,6 +898,9 @@ select option { background: var(--bg-menu); color: var(--text); }
 .p-controls { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
 .player.controls-visible .p-controls, .player[data-state='paused'] .p-controls, .player[data-state='ended'] .p-controls, .player.scrubbing .p-controls, .player.menu-open .p-controls { opacity: 1; }
 .player.controls-visible .p-controls *, .player[data-state='paused'] .p-controls *, .player[data-state='ended'] .p-controls *, .player.scrubbing .p-controls *, .player.menu-open .p-controls * { pointer-events: auto; }
+/* Reine Anzeige-Elemente dürfen nie Klicks abfangen – die Heatmap lag auf dem Handy
+   über dem Untertitel-Knopf, ein Tipp darauf hat dann vorgespult. */
+.player .p-controls .p-heat, .player .p-controls .p-heat *, .player .p-controls .p-hover-preview, .player .p-controls .p-hover-preview *, .player .p-controls .p-scrubber { pointer-events: none !important; }
 .p-controls::before, .p-controls::after { content: ''; position: absolute; left: 0; right: 0; pointer-events: none !important; z-index: -1; }
 .p-controls::before { top: 0; height: 100px; background: linear-gradient(rgba(0, 0, 0, 0.55), transparent); }
 .p-controls::after { bottom: 0; height: 120px; background: linear-gradient(transparent, rgba(0, 0, 0, 0.75)); }
@@ -1072,7 +1081,7 @@ select option { background: var(--bg-menu); color: var(--text); }
 .short-channel { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; min-width: 0; }
 .sc-link { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; min-width: 0; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); }
 .sc-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sc-link .avatar { --s: 34px !important; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.85); }
+.sc-link .avatar { --s: 34px !important; }
 .short-channel .sub-btn { flex: none; height: 32px; padding: 0 14px; font-size: 13px; font-weight: 600; background: #fff; color: #0f0f0f; }
 .short-channel .sub-btn.subscribed { background: rgba(255, 255, 255, 0.18); color: #fff; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
 .short-channel .sub-btn .icon { display: none; }
@@ -1304,11 +1313,24 @@ body.android-pip .player .p-video { width: 100vw !important; height: 100vh !impo
 .notice-dialog .dialog-close { display: none; }
 
 /* Shorts-Symbol in der Navigation immer rot, wenn aktiv (wie in der App). */
-.pivot-item[data-name='shorts'].active .when-active, .mini-item[data-name='shorts'].active .when-active, .guide-item[data-name='shorts'].active .when-active { fill: var(--red); }
+/* Ausgewählter Shorts-Tab wie in der App: weiß gefüllt (nicht rot). */
 
 /* ==== Modernes Design (2026) ================================================== */
-.masthead, .pivot-bar { background: color-mix(in srgb, var(--bg) 86%, transparent);
+/* Der Weichzeichner liegt auf einem Pseudo-Element: backdrop-filter direkt auf der
+   Kopfleiste macht sie zum Bezugsrahmen für position:fixed – die Suchvorschläge
+   (Handy) wurden dadurch auf 48 px Höhe gequetscht und verschwanden hinter den
+   Vorschaubildern. */
+.masthead, .pivot-bar { background: transparent; }
+.masthead::before, .pivot-bar::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
   -webkit-backdrop-filter: saturate(1.6) blur(18px); backdrop-filter: saturate(1.6) blur(18px); }
+body.mobile-search .masthead { z-index: 120; }
+body.mobile-search .masthead::before { background: var(--bg); }
+body.mobile-search .suggestions { background: var(--bg); }
+.sugg-fill { display: none; width: 36px; height: 36px; margin-right: -8px; color: var(--text-2); }
+body.mobile-search .sugg-fill { display: inline-flex; }
+body.mobile-search .suggestions li { min-height: 48px; }
 .pivot-item.active { color: var(--text); font-weight: 600; }
 .pivot-item .icon { width: 25px; height: 25px; }
 .pivot-item .avatar, .mini-item .avatar { --s: 26px !important; }
@@ -1333,3 +1355,136 @@ body.android-pip .player .p-video { width: 100vw !important; height: 100vh !impo
 .dl-hint { padding: 8px 16px 0; }
 @keyframes sa-pop { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
 .short-act.pop .sa-icon { animation: sa-pop 0.3s ease-out; }
+
+/* Kein Zoomen mit zwei Fingern (wie in der YouTube-App). Wischen/Scrollen bleibt. */
+html, body { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* ---- Downloads (offline) ------------------------------------------------------- */
+.downloads-page { max-width: 1096px; }
+.dl-offline-hint { display: flex; align-items: center; gap: 12px; margin: 8px 0 16px; padding: 12px 16px; border-radius: 12px; background: var(--tonal); }
+.dl-offline-hint .icon { flex: none; }
+.dl-sub { display: flex; align-items: center; gap: 8px; font-size: 18px; margin: 16px 0 12px; }
+.dl-job { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.dl-job-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.dl-job-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-bar { height: 4px; border-radius: 2px; background: var(--tonal); overflow: hidden; }
+.dl-bar div { height: 100%; background: var(--blue); transition: width 0.4s; }
+.dl-job.error .dl-bar div { background: var(--red); }
+.dl-shorts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(140px, 180px); gap: 12px; overflow-x: auto; scrollbar-width: none; padding-bottom: 8px; }
+.dl-short { position: relative; min-width: 0; }
+.dl-short-thumb { display: flex; align-items: center; justify-content: center; aspect-ratio: 9 / 16; border-radius: 12px; overflow: hidden; background: var(--skeleton); }
+.dl-short-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.dl-short-title { padding: 8px 28px 0 0; font-size: 14px; font-weight: 500; line-height: 20px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.dl-short .dl-more { position: absolute; right: -8px; bottom: 4px; }
+.dl-row-item { display: flex; gap: 12px; align-items: flex-start; }
+.dl-thumb { position: relative; flex: none; width: min(240px, 42vw); aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: var(--skeleton); display: flex; align-items: center; justify-content: center; }
+.dl-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.dl-thumb .thumb-badge { position: absolute; right: 6px; bottom: 6px; }
+.dl-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dl-title { font-weight: 500; line-height: 20px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.dl-have { display: flex; align-items: center; gap: 12px; padding: 8px 16px 12px; color: var(--text-2); }
+.dl-have span { flex: 1; }
+.dl-row { width: 100%; text-align: left; }
+.you-row { display: flex; align-items: center; gap: 16px; padding: 12px 8px; margin: 8px 0; border-radius: 12px; }
+.you-row:hover { background: var(--hover); }
+.you-row > span { flex: 1; display: flex; flex-direction: column; }
+@media (max-width: 791px) { .downloads-page { padding: 0 12px; } .you-row { margin: 8px 12px; } }
+
+/* ---- Wie in der YouTube-App (Handy) -------------------------------------------- */
+.mh-settings { display: none; }
+.pivot-item { position: relative; }
+.pivot-badge { position: absolute; top: 2px; left: calc(50% + 4px); min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #cc0000; color: #fff; font-size: 10px; line-height: 16px; text-align: center; }
+@media (max-width: 791px) {
+  /* Glocke und Profil stecken unten in der Leiste. */
+  .masthead .notif-btn, .masthead #account-btn { display: none !important; }
+  .pivot-item { font-size: 10px; letter-spacing: -0.1px; white-space: nowrap; }
+  .pivot-item > span:not(.pivot-badge) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .pivot-item .icon { width: 26px; height: 26px; }
+  /* „Mein YouTube“: oben nur Glocke, Suche, Einstellungen (kein Logo). */
+  body[data-page='you'] .masthead .logo { visibility: hidden; }
+  body[data-page='you'] .masthead .notif-btn { display: inline-flex !important; }
+  body[data-page='you'] .mh-settings { display: inline-flex; }
+}
+/* „Mein YouTube“ */
+.you-head { gap: 20px; padding: 16px 0 20px; }
+.you-avatar .avatar { --s: 80px !important; }
+.you-id h1 { font-size: 26px; font-weight: 700; line-height: 1.2; }
+.you-sub { display: flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 14px; margin-top: 4px; flex-wrap: wrap; }
+.you-sub a { display: inline-flex; align-items: center; color: var(--text-2); }
+.you-sub .icon { width: 18px; height: 18px; }
+.you-chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
+.you-chips::-webkit-scrollbar { display: none; }
+.you-chips .chip { gap: 8px; }
+.you-chips .chip .icon { width: 20px; height: 20px; }
+.you-section-head a:first-child { display: inline-flex; align-items: center; gap: 2px; }
+.you-section-head a:first-child .icon { width: 26px; height: 26px; }
+.you-list { padding: 16px 0 24px; }
+.you-list .you-row { margin: 0; padding: 14px 8px; gap: 24px; font-size: 16px; }
+.you-list .you-row small { display: block; font-size: 12px; }
+/* Shorts wie in der YouTube-App: kräftige Umriss-Symbole, „Mag ich“ gefüllt statt Kreis. */
+@media (max-width: 791px) {
+  .short-act.on .sa-icon { background: transparent; color: #fff; }
+  .sa-icon .icon { width: 32px; height: 32px; }
+  .short-act { gap: 2px; font-size: 13px; }
+  .short-round { background: transparent !important; }
+  .short-round .icon { width: 26px; height: 26px; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
+}
+.short-act[hidden] { display: none !important; }
+.chip-explore { padding: 0 12px; }
+.chip-explore .icon { width: 22px; height: 22px; }
+/* Shorts-Regal auf der Startseite wie in der App: Titel liegt auf dem Bild. */
+@media (max-width: 791px) {
+  .shelf-shorts .short-card { position: relative; }
+  .shelf-shorts .short-thumb { border-radius: 12px; }
+  .shelf-shorts .short-info { position: absolute; left: 0; right: 0; bottom: 0; padding: 48px 12px 12px; border-radius: 0 0 12px 12px; background: linear-gradient(transparent, rgba(0, 0, 0, 0.75)); pointer-events: none; }
+  .shelf-shorts .short-title { color: #fff; font-size: 15px; font-weight: 600; line-height: 20px; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
+  .shelf-shorts .short-views { display: none; }
+  .shelf-shorts .short-menu { top: 4px; right: 0; bottom: auto; color: #fff; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6)); }
+  .shelf-shorts .shorts-row { grid-auto-columns: calc((100% - 12px) / 2); gap: 12px; padding: 0 12px; }
+}
+/* Wiedergabeseite (Handy) wie in der YouTube-App: Profil + Abonnieren + reine Symbole in einer Zeile. */
+@media (max-width: 791px) {
+  .watch-title { font-size: 19px; line-height: 25px; font-weight: 700; }
+  .watch-mobile-meta { font-size: 14px; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; margin-top: 6px; }
+  .watch-mobile-meta .wm-channel { color: var(--text); font-weight: 600; }
+  .watch-mobile-meta .more-link { color: var(--text); font-weight: 600; }
+  .watch-owner-row { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; margin-top: 14px; }
+  .watch-owner-row .owner { flex: none; gap: 10px; }
+  .watch-owner-row .owner-text { display: none; }
+  .watch-owner-row .owner-avatar .avatar { --s: 38px !important; }
+  .watch-actions { flex: 1; justify-content: flex-end; margin: 0; padding: 0; gap: 2px; }
+  .watch-actions .seg-btn { display: contents; }
+  .watch-actions .btn { background: transparent !important; border: 0; padding: 0; width: 44px; height: 44px; justify-content: center; border-radius: 50%; }
+  .watch-actions .btn::before, .watch-actions .btn::after { display: none !important; }
+  .watch-actions .btn span, .watch-actions .dl-btn { display: none !important; }
+  .watch-actions .btn .icon, .watch-actions .more-btn .icon { width: 26px; height: 26px; margin: 0; }
+  .watch-actions .more-btn { background: transparent !important; }
+}
+.ci-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.ci-row:last-child { border-bottom: 0; }
+.ci-preview { width: 32px; display: flex; justify-content: center; }
+.ci-label { flex: 1; display: flex; flex-direction: column; }
+.icon-custom { fill: currentColor; }
+.p-minimize { display: none; }
+.short-top-title { font-size: 22px; font-weight: 700; color: #fff; margin-left: 12px; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); }
+/* Player (Handy) wie in der App: ⌄ oben links, CC + Einstellungen oben rechts. */
+@media (max-width: 791px) {
+  .player:not(.mini) .p-minimize { display: inline-flex; }
+  .player:not(.mini):not(.fullscreen) .p-title { display: none; }
+  .player:not(.mini) .p-right .p-cc, .player:not(.mini) .p-right .p-settings-btn, .player:not(.mini) .p-right .p-autoplay { position: absolute; top: 8px; }
+  .player:not(.mini) .p-right .p-settings-btn { right: 8px; }
+  .player:not(.mini) .p-right .p-cc { right: 56px; }
+  .player:not(.mini) .p-right .p-autoplay { right: 108px; top: 18px; }
+  .player:not(.mini) .p-big { background: rgba(0, 0, 0, 0.45); }
+}
+
+/* Untere Leiste: 5 gleich breite Felder, Text kann nie in das Nachbarfeld laufen. */
+.pivot-item { flex: 1 1 0; min-width: 0; padding: 0 2px; overflow: hidden; }
+.pivot-label { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.pl-long { display: none; }
+@media (min-width: 520px) { .pl-long { display: block; } .pl-short { display: none; } }
+/* Logo oben links wie in der App: rotes Logo + schmaler, fetter Schriftzug. */
+.logo { gap: 3px; }
+.logo-svg { width: 30px; height: 30px; }
+.logo-text { font-weight: 700; letter-spacing: -1.2px; font-stretch: condensed; font-size: 21px; transform: scaleX(0.88); transform-origin: left center; }
+@media (max-width: 791px) { .logo-text { font-size: 20px; } }

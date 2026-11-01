@@ -22,6 +22,8 @@ export const DEFAULT_SETTINGS = {
   captions: false,
   restricted: false,
   historyPaused: false,
+  saveToGallery: false,
+  brandName: '',
   clients: ['ANDROID_VR', 'TV', 'IOS', 'WEB_EMBEDDED', 'MWEB', 'WEB']
 };
 

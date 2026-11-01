@@ -144,3 +144,29 @@ test('TV-Kacheln (Anmeldung per Geräte-Code) werden gelesen', async () => {
   assert.equal(items[0].channel.name, 'Kanal A');
   assert.equal(items[1].type, 'short');
 });
+
+test('Eilmeldung-Regal wird ausgeblendet, außer bei Nachrichten-Suche', async () => {
+  const { collectItems } = await import('../server/normalize.js');
+  const vid = (id) => ({ type: 'Video', video_id: id, title: { text: 'Video ' + id }, author: { name: 'K', id: 'UC1' } });
+  const root = [
+    vid('aaaaaaaaaaa'),
+    { type: 'Shelf', title: { text: 'Eilmeldung' }, content: { type: 'VerticalList', contents: [vid('bbbbbbbbbbb'), vid('ccccccccccc')] } },
+    vid('ddddddddddd')
+  ];
+  const normal = collectItems(root);
+  assert.ok(!normal.some((i) => i.type === 'shelf'), 'kein Eilmeldung-Regal');
+  assert.deepEqual(normal.map((i) => i.id), ['aaaaaaaaaaa', 'ddddddddddd']);
+  const news = collectItems(root, { news: true });
+  assert.ok(news.some((i) => i.type === 'shelf' && i.title === 'Eilmeldung'));
+});
+
+test('Nachrichten-Regale mit anderen Titeln werden ebenfalls ausgeblendet', async () => {
+  const { collectItems } = await import('../server/normalize.js');
+  const vid = (id) => ({ type: 'Video', video_id: id, title: { text: 'Video ' + id }, author: { name: 'K', id: 'UC1' } });
+  for (const t of ['Top-Nachrichten', 'Breaking News', 'Schlagzeilen', 'Aktuelles']) {
+    const items = collectItems([{ type: 'RichShelf', title: { text: t }, contents: [vid('bbbbbbbbbbb')] }, vid('aaaaaaaaaaa')]);
+    assert.deepEqual(items.map((i) => i.type), ['video'], t);
+  }
+  const shorts = collectItems([{ type: 'ReelShelf', title: { text: 'Shorts' }, items: [vid('ccccccccccc')] }]);
+  assert.equal(shorts[0].type, 'shelf', 'normale Regale bleiben');
+});
