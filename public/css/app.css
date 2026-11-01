@@ -1477,3 +1477,9 @@ html, body { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; text-siz
   .player:not(.mini) .p-right .p-autoplay { right: 108px; top: 18px; }
   .player:not(.mini) .p-big { background: rgba(0, 0, 0, 0.45); }
 }
+
+/* Untere Leiste: 5 gleich breite Felder, Text kann nie in das Nachbarfeld laufen. */
+.pivot-item { flex: 1 1 0; min-width: 0; padding: 0 2px; overflow: hidden; }
+.pivot-label { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.pl-long { display: none; }
+@media (min-width: 520px) { .pl-long { display: block; } .pl-short { display: none; } }

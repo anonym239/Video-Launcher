@@ -72,9 +72,9 @@ function buildMasthead() {
 function updateYouNav() {
   const acc = state.auth.account;
   document.querySelectorAll('.pivot-item[data-name="you"], .mini-item[data-name="you"]').forEach((a) => {
-    const label = a.querySelector('span:last-child')?.textContent || 'Du';
-    if (signedIn() && acc?.photo) a.innerHTML = `${avatar(acc.photo, 26, acc.name)}<span>${label}</span>`;
-    else a.innerHTML = `${icon('library', 'base-icon')}${icon('libraryFilled', 'when-active')}<span>${label}</span>`;
+    const label = a.querySelector('.pivot-label, span:last-child')?.textContent || 'Du';
+    if (signedIn() && acc?.photo) a.innerHTML = `${avatar(acc.photo, 26, acc.name)}<span class="pivot-label">${label}</span>`;
+    else a.innerHTML = `${icon('library', 'base-icon')}${icon('libraryFilled', 'when-active')}<span class="pivot-label">${label}</span>`;
   });
 }
 
@@ -330,7 +330,7 @@ function buildGuide() {
     { href: '/notifications', label: 'Benachrichtigungen', icon: 'bell', active: 'bellFilled', name: 'notifications' },
     { href: '/feed/you', label: 'Mein YouTube', icon: 'library', active: 'libraryFilled', name: 'you' }
   ]
-    .map((n) => html`<a class="pivot-item" href="${n.href}" data-name="${n.name}">${raw(icon(n.icon, 'base-icon'))}${raw(icon(n.active, 'when-active'))}<span>${n.label}</span>${n.name === 'notifications' ? raw('<span class="pivot-badge" hidden></span>') : ''}</a>`)
+    .map((n) => html`<a class="pivot-item" href="${n.href}" data-name="${n.name}" aria-label="${n.label}">${raw(icon(n.icon, 'base-icon'))}${raw(icon(n.active, 'when-active'))}${n.name === 'notifications' ? raw('<span class="pivot-label pl-long">Benachrichtigungen</span><span class="pivot-label pl-short">Mitteilungen</span><span class="pivot-badge" hidden></span>') : html`<span class="pivot-label">${n.label}</span>`}</a>`)
     .join('');
   loadGuideSubs();
 }
